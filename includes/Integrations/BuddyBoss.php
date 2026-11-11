@@ -122,7 +122,6 @@ final class BuddyBoss {
 
 		// Tell BuddyBoss that media is offloaded.
 		add_filter( 'bb_media_offload_delivered', array( $this, 'filter_offload_delivered' ) );
-		add_filter( 'bb_media_check_default_access', array( $this, 'filter_skip_access_check' ) );
 		add_filter( 'bb_media_offload_delivery_provider', array( $this, 'filter_delivery_provider' ) );
 		add_filter( 'bp_core_get_js_strings', array( $this, 'filter_js_strings' ) );
 
@@ -501,17 +500,6 @@ final class BuddyBoss {
 	 */
 	public function filter_offload_delivered( $value ) {
 		return $this->offloader->settings()->is_configured() ? true : $value;
-	}
-
-	/**
-	 * BuddyBoss checks whether its media folders are directly reachable. Skip
-	 * that check only when no local copies exist that could be reachable.
-	 *
-	 * @param bool $value Current value.
-	 * @return bool
-	 */
-	public function filter_skip_access_check( $value ) {
-		return $this->offloader->settings()->is_configured() && $this->offloader->settings()->get( 'remove_local' ) ? true : $value;
 	}
 
 	/**

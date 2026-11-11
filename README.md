@@ -48,6 +48,7 @@ BM S3 Offload does all of that for free – the whole plugin including translati
 - **Delivery** from the bucket or a CDN / custom domain. URLs in post content are rewritten on output – the database keeps local URLs, so you are never locked in.
 - **Private files** with pre-signed URLs (AWS Signature V4). Signed URLs are stable for half of their lifetime, so browsers can cache them.
   - *Private* media (marked in the media library): delivered to everybody, but only with expiring signed URLs – hotlink protection, links stop working after the lifetime.
+  - When files become private, copies already cached by a CDN stay reachable until their `max-age` expires – purge the CDN if needed.
   - *Restricted* media (BuddyBoss photos/documents/videos, WooCommerce and Easy Digital Downloads product files): signed URLs only after the owning plugin has checked the access – never by generic filters such as post content.
 - **Make media private or public** per file or in bulk – objects are moved inside the bucket (server-side copy, no re-upload).
 - **Bulk tools** in the admin – in the browser or **in the background via WP-Cron** (close the page and come back later) – and **WP-CLI** for huge libraries.
@@ -70,7 +71,7 @@ Tested with BuddyBoss Platform 3.7.1.
 | What | How |
 |---|---|
 | Photos (activity, profiles, groups, forums, messages) | Stored as **private objects**. Delivered through BuddyBoss' own preview URLs: every request runs BuddyBoss' access check (public, logged-in, friends, only me, group members, message participants, forums) and is then redirected to a short-lived signed URL. Links in e-mails carry BuddyBoss' signed receiver segment and keep working. Optional "direct" mode embeds signed URLs in pages that BuddyBoss has already filtered by privacy. |
-| Documents, videos (BuddyBoss add-ons) | Private objects, delivered with signed URLs via BuddyBoss' delivery filters. |
+| Documents, videos (BuddyBoss add-ons) | Private objects, delivered with signed URLs via BuddyBoss' delivery filters – only after BuddyBoss' access check for the current user. Not tested end-to-end (the add-ons are commercial); links in e-mails expire after the signed URL lifetime. |
 | Downloads | BuddyBoss' download handler checks permissions and then serves the bucket file. |
 | Avatars and cover images (members, groups) | Mirrored to the bucket and served from there. Local copies are kept because BuddyBoss detects them by scanning the file system. |
 | Thumbnail regeneration | Originals are restored temporarily and the new sizes are offloaded. |

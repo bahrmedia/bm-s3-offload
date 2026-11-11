@@ -76,6 +76,16 @@ $signed = $offloader->with_private_access(
 );
 bms3o_t( 200 === bms3o_t_status( $signed ), 'Trusted code paths can sign restricted files' );
 
+$editor  = bms3o_t_user( 'bms3o_editor', 'editor' );
+$library = new BahrMedia\S3Offload\Admin\MediaLibrary( $plugin );
+wp_set_current_user( $editor );
+$actions = $library->row_actions( array(), get_post( $protected ) );
+$storage = preg_grep( '/^bms3o_/', array_keys( $actions ) );
+bms3o_t( empty( $storage ), 'Editors get no storage actions for protected files', $storage );
+$actions = $library->row_actions( array(), get_post( $id ) );
+bms3o_t( isset( $actions['bms3o_offload'] ), 'Editors keep storage actions for normal media' );
+wp_set_current_user( 0 );
+
 bms3o_t_section( 'Safety nets' );
 
 $endpoint = $plugin->settings->get( 'endpoint' );

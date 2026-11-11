@@ -816,7 +816,7 @@ final class Attachments {
 			return false;
 		}
 
-		if ( $main['local_removed'] || $this->offloader->settings()->get( 'remove_local' ) ) {
+		if ( ( $main['local_removed'] || $this->offloader->settings()->get( 'remove_local' ) ) && $this->can_remove_local( $attachment_id ) ) {
 			$this->restored[ $attachment_id ] = true;
 			$this->offloader->queue_local_removal( $this->paths( $attachment_id ) );
 		}

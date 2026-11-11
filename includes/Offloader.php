@@ -166,6 +166,24 @@ final class Offloader {
 	}
 
 	/**
+	 * Whether an object key lies in the current site's key space.
+	 *
+	 * @param string $key Object key.
+	 * @return bool
+	 */
+	private function owns_key( $key ) {
+		foreach ( array( false, true ) as $is_private ) {
+			$prefix = $this->key_prefix( $is_private );
+			if ( '' !== $prefix && 0 === strpos( $key, $prefix ) ) {
+				// Keys of sub-sites start with the main site's prefix too: exclude them.
+				$rest = substr( $key, strlen( $prefix ) );
+				return '' !== $this->site_dir() || ! preg_match( '#^sites/\d+/#', $rest );
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Key segment of the current site on multisite ("sites/2/"), mirroring
 	 * WordPress' own uploads layout so that sites sharing a bucket never collide.
 	 *
@@ -241,7 +259,8 @@ final class Offloader {
 				continue;
 			}
 
-			if ( ! $force && $item && $item['bucket'] === $bucket && $item['object_key'] === $key && $item['filesize'] === $size && ( 0 === $item['local_mtime'] || $item['local_mtime'] === $mtime ) ) {
+			$stored_mtime = $item && isset( $item['local_mtime'] ) ? (int) $item['local_mtime'] : 0;
+			if ( ! $force && $item && $item['bucket'] === $bucket && $item['object_key'] === $key && $item['filesize'] === $size && ( 0 === $stored_mtime || $stored_mtime === $mtime ) ) {
 				$result['skipped'][] = $path;
 				continue;
 			}
@@ -253,8 +272,9 @@ final class Offloader {
 				continue;
 			}
 
-			// The key moved within the bucket (e.g. privacy changed): remove the old object.
-			if ( $item && $item['bucket'] === $bucket && $item['object_key'] !== $key ) {
+			// The key moved within the bucket (e.g. privacy changed): remove the old object,
+			// but only if it belongs to this site's key space (never another site's object).
+			if ( $item && $item['bucket'] === $bucket && $item['object_key'] !== $key && $this->owns_key( $item['object_key'] ) ) {
 				try {
 					$client->delete( $item['object_key'] );
 				} catch ( S3Exception $e ) {
@@ -403,7 +423,8 @@ final class Offloader {
 			}
 
 			clearstatcache( true, $file );
-			if ( (int) filesize( $file ) !== $item['filesize'] || ( $item['local_mtime'] && (int) filemtime( $file ) !== $item['local_mtime'] ) ) {
+			$stored_mtime = isset( $item['local_mtime'] ) ? (int) $item['local_mtime'] : 0;
+			if ( (int) filesize( $file ) !== $item['filesize'] || ( $stored_mtime && (int) filemtime( $file ) !== $stored_mtime ) ) {
 				continue; // Changed after upload: keep it, it will be offloaded again.
 			}
 
@@ -541,7 +562,7 @@ final class Offloader {
 			$item['is_private'] = (bool) $is_private;
 			$this->items->save( $item );
 
-			if ( $old_key !== $key ) {
+			if ( $old_key !== $key && $this->owns_key( $old_key ) ) {
 				try {
 					$client->delete( $old_key );
 				} catch ( \Exception $e ) {

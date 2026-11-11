@@ -425,7 +425,8 @@ final class Items {
 	 * @return string
 	 */
 	private static function cache_key( $path ) {
-		return md5( $path );
+		// Versioned: rows cached before a schema change are never used.
+		return self::DB_VERSION . ':' . md5( $path );
 	}
 
 	/**

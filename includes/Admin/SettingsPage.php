@@ -309,7 +309,7 @@ final class SettingsPage {
 
 			<h2><?php esc_html_e( 'Uninstall', 'bm-s3-offload' ); ?></h2>
 			<table class="form-table" role="presentation">
-				<?php $this->field( 'remove_data', __( 'Remove data', 'bm-s3-offload' ), 'checkbox', array( 'label' => __( 'Delete settings and the offload table when the plugin is deleted. Objects in the bucket are never deleted.', 'bm-s3-offload' ) ) ); ?>
+				<?php $this->field( 'remove_data', __( 'Remove data', 'bm-s3-offload' ), 'checkbox', array( 'label' => __( 'Delete settings and the offload table when the plugin is deleted. Objects in the bucket are never deleted. Nothing is removed while files exist only in the bucket – run "Leave the bucket" first.', 'bm-s3-offload' ) ) ); ?>
 			</table>
 
 			<?php submit_button(); ?>
@@ -407,9 +407,14 @@ final class SettingsPage {
 		$was_private = (bool) $this->plugin->settings->get( 'bb_private' );
 		$errors      = $this->plugin->settings->save( $input );
 
-		// Existing BuddyBoss objects follow a changed "private media" setting (in the background).
-		if ( (bool) $this->plugin->settings->get( 'bb_private' ) !== $was_private && $this->plugin->bulk->remaining( 'sync_privacy' ) > 0 ) {
-			$this->plugin->background->start( 'sync_privacy' );
+		// Existing BuddyBoss objects become private automatically (in the background). The other
+		// direction makes member media public and is only done on request (tools tab).
+		$now_private = (bool) $this->plugin->settings->get( 'bb_private' );
+		if ( $now_private && ! $was_private && $this->plugin->bulk->remaining( 'sync_privacy' ) > 0 && ! $this->plugin->background->start( 'sync_privacy' ) ) {
+			$errors[] = __( 'Existing BuddyBoss media could not be made private yet because another background operation is running. Start "Apply BuddyBoss privacy setting" in the tools tab afterwards.', 'bm-s3-offload' );
+		}
+		if ( ! $now_private && $was_private && $this->plugin->bulk->remaining( 'sync_privacy' ) > 0 ) {
+			$errors[] = __( 'Existing BuddyBoss media stay private until you run "Apply BuddyBoss privacy setting" in the tools tab. That makes them publicly readable for anyone who knows the address.', 'bm-s3-offload' );
 		}
 		if ( ! empty( $errors ) ) {
 			set_transient( 'bms3o_save_errors_' . get_current_user_id(), $errors, MINUTE_IN_SECONDS );
@@ -674,7 +679,7 @@ final class SettingsPage {
 			$errors = get_transient( 'bms3o_save_errors_' . get_current_user_id() );
 			delete_transient( 'bms3o_save_errors_' . get_current_user_id() );
 			if ( is_array( $errors ) && ! empty( $errors ) ) {
-				echo '<div class="notice notice-error"><p>' . esc_html__( 'The prefixes were not saved:', 'bm-s3-offload' ) . '</p><ul>';
+				echo '<div class="notice notice-warning"><p>' . esc_html__( 'Settings saved with notes:', 'bm-s3-offload' ) . '</p><ul>';
 				foreach ( $errors as $error ) {
 					echo '<li>' . esc_html( $error ) . '</li>';
 				}

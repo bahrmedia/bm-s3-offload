@@ -32,6 +32,16 @@ function bms3o_uninstall_site() {
 	}
 
 	$table = $wpdb->prefix . 'bms3o_items';
+
+	// Files that only exist in the bucket would lose their mapping: keep everything
+	// until "Leave the bucket" (or "Restore local copies") has been run.
+	$bucket_only = (int) $wpdb->get_var( "SHOW TABLES LIKE '{$table}'" ) // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery
+		? (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE local_removed = 1" ) // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery
+		: 0;
+	if ( $bucket_only > 0 ) {
+		return;
+	}
+
 	$wpdb->query( "DROP TABLE IF EXISTS {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery,WordPress.DB.DirectDatabaseQuery.SchemaChange
 	delete_option( 'bms3o_settings' );
 	delete_option( 'bms3o_db_version' );

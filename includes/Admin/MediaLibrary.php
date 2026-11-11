@@ -186,6 +186,21 @@ final class MediaLibrary {
 	}
 
 	/**
+	 * Whether the current user may run storage actions on an attachment.
+	 * Protected files (BuddyBoss, shop downloads) need the plugin capability.
+	 *
+	 * @param int $attachment_id Attachment ID.
+	 * @return bool
+	 */
+	private function can_manage( $attachment_id ) {
+		if ( ! current_user_can( 'edit_post', $attachment_id ) ) {
+			return false;
+		}
+		$file = (string) get_post_meta( $attachment_id, '_wp_attached_file', true );
+		return ! $this->plugin->attachments->is_protected_path( $file ) || current_user_can( SettingsPage::capability() );
+	}
+
+	/**
 	 * Applicable actions for an attachment.
 	 *
 	 * @param int $attachment_id Attachment ID.
@@ -232,7 +247,7 @@ final class MediaLibrary {
 	 * @return array
 	 */
 	public function row_actions( $actions, $post ) {
-		if ( ! current_user_can( 'edit_post', $post->ID ) ) {
+		if ( ! $this->can_manage( $post->ID ) ) {
 			return $actions;
 		}
 		$labels = self::actions();
@@ -273,7 +288,7 @@ final class MediaLibrary {
 		$attachment_id = isset( $_GET['attachment'] ) ? absint( $_GET['attachment'] ) : 0;
 
 		check_admin_referer( 'bms3o_item_' . $operation . '_' . $attachment_id );
-		if ( ! array_key_exists( $operation, self::actions() ) || ! current_user_can( 'edit_post', $attachment_id ) || ! $this->plugin->settings->is_configured() ) {
+		if ( ! array_key_exists( $operation, self::actions() ) || ! $this->can_manage( $attachment_id ) || ! $this->plugin->settings->is_configured() ) {
 			wp_die( esc_html__( 'You are not allowed to do this.', 'bm-s3-offload' ), 403 );
 		}
 
@@ -316,7 +331,7 @@ final class MediaLibrary {
 		$done   = 0;
 		$failed = 0;
 		foreach ( array_map( 'intval', (array) $ids ) as $id ) {
-			if ( ! current_user_can( 'edit_post', $id ) ) {
+			if ( ! $this->can_manage( $id ) ) {
 				++$failed;
 				continue;
 			}
@@ -387,7 +402,7 @@ final class MediaLibrary {
 	 * @return array
 	 */
 	public function modal_field( $fields, $post ) {
-		if ( ! $post instanceof \WP_Post || ! current_user_can( 'edit_post', $post->ID ) ) {
+		if ( ! $post instanceof \WP_Post || ! $this->can_manage( $post->ID ) ) {
 			return $fields;
 		}
 
@@ -432,7 +447,7 @@ final class MediaLibrary {
 	 */
 	public function submitbox() {
 		$post = get_post();
-		if ( ! $post || ! current_user_can( 'edit_post', $post->ID ) ) {
+		if ( ! $post || ! $this->can_manage( $post->ID ) ) {
 			return;
 		}
 

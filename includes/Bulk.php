@@ -196,10 +196,15 @@ final class Bulk {
 			case 'sync_privacy':
 				// BuddyBoss media whose storage does not match the "private media" setting.
 				$sql = $wpdb->prepare(
-					"SELECT DISTINCT source_id FROM {$items} WHERE source_type = %s AND path LIKE %s AND is_private = %d AND source_id > %d ORDER BY source_id ASC LIMIT %d",
+					"SELECT DISTINCT source_id FROM {$items} WHERE source_type = %s AND ( path LIKE %s OR path LIKE %s OR path LIKE %s ) AND is_private = %d
+					AND NOT EXISTS ( SELECT 1 FROM {$wpdb->postmeta} m WHERE m.post_id = source_id AND m.meta_key = %s AND m.meta_value = '1' )
+					AND source_id > %d ORDER BY source_id ASC LIMIT %d",
 					Items::SOURCE_POST,
-					$wpdb->esc_like( 'bb_' ) . '%',
+					'bb\\_medias/%',
+					'bb\\_documents/%',
+					'bb\\_videos/%',
 					$this->attachments->buddyboss_private() ? 0 : 1,
+					Attachments::META_PRIVATE,
 					$cursor,
 					$limit
 				);
@@ -250,10 +255,14 @@ final class Bulk {
 
 			case 'sync_privacy':
 				$sql = $wpdb->prepare(
-					"SELECT COUNT(DISTINCT source_id) FROM {$items} WHERE source_type = %s AND path LIKE %s AND is_private = %d",
+					"SELECT COUNT(DISTINCT source_id) FROM {$items} WHERE source_type = %s AND ( path LIKE %s OR path LIKE %s OR path LIKE %s ) AND is_private = %d
+					AND NOT EXISTS ( SELECT 1 FROM {$wpdb->postmeta} m WHERE m.post_id = source_id AND m.meta_key = %s AND m.meta_value = '1' )",
 					Items::SOURCE_POST,
-					$wpdb->esc_like( 'bb_' ) . '%',
-					$this->attachments->buddyboss_private() ? 0 : 1
+					'bb\\_medias/%',
+					'bb\\_documents/%',
+					'bb\\_videos/%',
+					$this->attachments->buddyboss_private() ? 0 : 1,
+					Attachments::META_PRIVATE
 				);
 				break;
 
