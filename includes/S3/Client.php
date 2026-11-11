@@ -507,7 +507,7 @@ class Client {
 	 * @return string
 	 */
 	private static function read_chunk( $handle, $length ) {
-		$data = '';
+		$data    = '';
 		$missing = $length;
 		while ( $missing > 0 && ! feof( $handle ) ) {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread
