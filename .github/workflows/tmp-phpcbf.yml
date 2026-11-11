@@ -1,0 +1,31 @@
+# Temporary helper: runs phpcbf and uploads the resulting patch. Removed before merging.
+name: tmp-phpcbf
+on:
+  push:
+    branches: [night]
+permissions:
+  contents: read
+jobs:
+  cbf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+          tools: composer
+      - run: |
+          composer global config allow-plugins.dealerdirect/phpcodesniffer-composer-installer true
+          composer global require --no-interaction wp-coding-standards/wpcs:^3.1 phpcompatibility/phpcompatibility-wp:^2.1
+      - run: |
+          BIN=$(composer global config bin-dir --absolute)
+          $BIN/phpcbf || true
+          git diff > phpcbf.patch
+          $BIN/phpcs --report=full > phpcs-report.txt || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: phpcbf
+          path: |
+            phpcbf.patch
+            phpcs-report.txt
