@@ -127,11 +127,19 @@ $download = add_query_arg(
 	),
 	$site . '/'
 );
-$owner = bms3o_t_get( $download, bms3o_t_cookie( $anna ) );
+$owner    = bms3o_t_get( $download, bms3o_t_cookie( $anna ) );
 bms3o_t( 200 === $owner['code'] && strlen( $owner['body'] ) > 1000, 'Owner can download her private photo (local copy removed)', $owner['code'] );
 $other = bms3o_t_get( $download, bms3o_t_cookie( $ben ) );
 bms3o_t( 200 !== $other['code'] || strlen( $other['body'] ) < 1000, 'Other members cannot download it' );
-$bypass = bms3o_t_get( add_query_arg( array( 'attachment_id' => $private['attachment_id'], 'download_media_file' => 1 ), $site . '/' ) );
+$bypass = bms3o_t_get(
+	add_query_arg(
+		array(
+			'attachment_id'       => $private['attachment_id'],
+			'download_media_file' => 1,
+		),
+		$site . '/'
+	)
+);
 bms3o_t( false === strpos( $bypass['location'] . $bypass['body'], 'X-Amz' ), 'Incomplete download parameters never yield a signed URL', $bypass['location'] );
 
 bms3o_t_settings( array( 'bb_delivery' => 'direct' ) );

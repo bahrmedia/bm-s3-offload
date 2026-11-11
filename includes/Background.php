@@ -245,7 +245,7 @@ final class Background {
 	/**
 	 * Acquires the lock, or refreshes it when this request holds it (heartbeat).
 	 *
-	 * add_option() is atomic (unique option name), so only one slice can win.
+	 * Uses add_option(), which is atomic (unique option name), so only one slice can win.
 	 *
 	 * @return bool
 	 */
