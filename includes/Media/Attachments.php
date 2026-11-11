@@ -437,7 +437,7 @@ final class Attachments {
 
 		$size = 0;
 		foreach ( $this->paths( $attachment_id, $meta ) as $path ) {
-			$file = $this->offloader->absolute( $path );
+			$file  = $this->offloader->absolute( $path );
 			$size += is_file( $file ) ? (int) filesize( $file ) : 0;
 		}
 

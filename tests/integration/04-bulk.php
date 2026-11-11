@@ -59,9 +59,11 @@ $background->stop();
 delete_option( Background::OPTION );
 bms3o_t( $background->start( 'download' ), 'Background operation started' );
 bms3o_t( ! $background->start( 'offload' ), 'A second operation is refused while one is running' );
-for ( $i = 0; $i < 10 && $background->is_running(); $i++ ) {
+$slices = 0;
+while ( $slices < 10 && $background->is_running() ) {
 	delete_transient( Background::LOCK );
 	do_action( Background::HOOK );
+	++$slices;
 }
 $state = $background->state();
 bms3o_t( 'done' === $state['status'] && $state['processed'] >= 3, 'Background operation finished', $state );
