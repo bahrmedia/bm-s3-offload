@@ -1,6 +1,6 @@
 === BM S3 Offload ===
 Contributors: bahrmedia
-Tags: s3, offload, media, buddyboss, cdn
+Tags: s3, offload, buddyboss, woocommerce, cdn
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 7.4
@@ -16,25 +16,35 @@ BM S3 Offload copies your media to Amazon S3, Cloudflare R2, Wasabi, Backblaze B
 
 Everything is free – there is no Pro version:
 
-* Automatic offload of new uploads including all image sizes
-* Bulk migration of existing media (in the browser or with WP-CLI)
+* Automatic offload of new uploads including all image sizes (large uploads in the background)
+* Bulk migration of existing media – in the browser, in the background (WP-Cron) or with WP-CLI
 * Optional removal of local copies – restored automatically when WordPress needs them
-* Delivery from the bucket, a CDN or with pre-signed URLs for private files
-* Media library status column, row and bulk actions
+* Delivery from the bucket, a CDN or with pre-signed URLs
+* Make single files private (expiring signed URLs) or public
+* Media library: status column, filter, row and bulk actions
+* CDN for theme, plugin and core scripts and styles
+* WebP/AVIF copies of image optimisers are offloaded too
 * "Leave the bucket": move everything back with one click
+* `wp bm-s3 verify --fix`: check and repair bucket contents
 * All settings configurable in wp-config.php (`BMS3O_*` constants)
 * Credentials stored encrypted
 * No SDK, no external dependencies – an own, lightweight S3 client (AWS Signature V4)
+* End-to-end tested against real S3 storage, BuddyBoss and WooCommerce
 
 = BuddyBoss =
 
 * Photos, documents and videos are stored as private objects and only delivered after BuddyBoss' own access check (public, logged-in, friends, only me, groups, messages, forums)
+* Links in notification e-mails keep working
 * Member and group avatars and cover images are mirrored to the bucket
 * Thumbnail regeneration and downloads keep working without local files
 
+= WooCommerce =
+
+* Downloadable product files are private objects. After WooCommerce has checked the order, customers are redirected to a short-lived signed URL – downloads never pass through your server.
+
 = WP-CLI =
 
-`wp bm-s3 status|test|offload|remove-local|download|unoffload|bb-sync`
+`wp bm-s3 status|test|offload|remove-local|download|unoffload|privacy|verify|background|bb-sync`
 
 == Installation ==
 

@@ -93,8 +93,8 @@ final class BuddyBoss {
 			return;
 		}
 
-		// BuddyBoss' download handlers check access before they request the file URL.
-		add_action( 'init', array( $this, 'maybe_grant_download_access' ), 1 );
+		// BuddyBoss' download functions are only reached after its can_download check.
+		add_filter( 'bms3o_can_access_private', array( $this, 'filter_access_in_download' ), 10, 2 );
 
 		// Photos, documents, videos: deliver from the bucket instead of local symlinks.
 		foreach ( array( 'bb_media_do_symlink', 'bb_document_do_symlink', 'bb_video_do_symlink', 'bb_video_create_thumb_symlinks' ) as $filter ) {
@@ -151,21 +151,26 @@ final class BuddyBoss {
 	 */
 
 	/**
-	 * Opens the private scope for BuddyBoss download requests. BuddyBoss checks
-	 * the permissions (private network, can_download) and only then asks for
-	 * the attachment URL; denied requests are redirected before that.
+	 * Allows a signed URL for a restricted file while BuddyBoss' own download
+	 * function requests it. BuddyBoss calls these functions only after its
+	 * access check (private network, can_download for this attachment).
 	 *
-	 * @return void
+	 * @param bool  $allowed Current value.
+	 * @param array $item    Item row.
+	 * @return bool
 	 */
-	public function maybe_grant_download_access() {
-		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- Read-only detection of BuddyBoss' own download request.
-		foreach ( array( 'download_media_file', 'download_document_file', 'download_video_file' ) as $flag ) {
-			if ( isset( $_GET[ $flag ], $_GET['attachment_id'] ) ) {
-				$this->offloader->grant_private_access();
-				return;
+	public function filter_access_in_download( $allowed, $item ) {
+		if ( $allowed ) {
+			return true;
+		}
+		foreach ( array( 'bp_media_download_file', 'bp_document_download_file', 'bb_document_download_file', 'bp_video_download_file', 'bb_video_download_file' ) as $function_name ) {
+			$attachment_id = self::caller_argument( $function_name, 0 );
+			if ( null !== $attachment_id ) {
+				// Only the attachment BuddyBoss is serving.
+				return isset( $item['source_type'], $item['source_id'] ) && 'attachment' === $item['source_type'] && (int) $attachment_id === (int) $item['source_id'];
 			}
 		}
-		// phpcs:enable
+		return $allowed;
 	}
 
 	/**

@@ -18,6 +18,16 @@ All notable changes to this project are documented in this file. The format foll
 - WP-CLI commands `wp bm-s3 …`.
 - Settings overridable by `BMS3O_*` constants or environment variables; encrypted secret storage.
 - English and German translations.
+- Make media private (expiring signed URLs) or public, per file or in bulk (server-side copy).
+- WooCommerce: downloadable products are redirected to short-lived signed URLs after WooCommerce's checks; Easy Digital Downloads files are kept private and local.
+- Bulk operations in the background via WP-Cron, controllable in the admin and with `wp bm-s3 background`.
+- Large uploads (> 64 MiB) are offloaded in the background after the upload request.
+- Media library filter by storage state.
+- Pull CDN for theme, plugin and core scripts and styles.
+- WebP/AVIF copies of image optimisers (`photo.jpg.webp`) are offloaded, rewritten and removed with the image.
+- Elementor output is rewritten.
+- `wp bm-s3 verify [--fix]` checks every object and repairs missing ones from local copies.
+- End-to-end test suite (WordPress 6.2/PHP 7.4 and latest/PHP 8.3, MinIO, BuddyBoss, WooCommerce) in CI.
 
 ### Security
 

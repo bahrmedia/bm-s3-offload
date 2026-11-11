@@ -12,7 +12,15 @@ defined( 'ABSPATH' ) || exit;
 /**
  * Runs a bulk operation in time slices via WP-Cron, so the browser does not
  * have to stay open. Every slice processes batches for a few seconds, saves
- * its progress and schedules the next slice. A lock prevents parallel runs.
+ * its progress and schedules the next slice.
+ *
+ * Safety:
+ *  - The state is always read fresh from the database (never from the
+ *    request cache), so "stop" takes effect after the current batch.
+ *  - Every run has a token; a slice only writes while its token is current,
+ *    so an old slice can never overwrite a newer run.
+ *  - The lock is atomic (add_option) and expires; a watchdog in the hourly
+ *    plugin cron resumes runs whose slice died (e.g. fatal error, timeout).
  *
  * Progress continues on every page view (WP-Cron), immediately while the
  * tools screen is open (it pings WP-Cron), and independently of traffic when
@@ -30,6 +38,11 @@ final class Background {
 	const SLICE = 20;
 
 	/**
+	 * Seconds after which a lock (or a silent run) is considered dead.
+	 */
+	const STALE = 600;
+
+	/**
 	 * Bulk operations.
 	 *
 	 * @var Bulk
@@ -42,6 +55,13 @@ final class Background {
 	 * @var Offloader
 	 */
 	private $offloader;
+
+	/**
+	 * Whether this request holds the lock.
+	 *
+	 * @var bool
+	 */
+	private $holds_lock = false;
 
 	/**
 	 * Constructor.
@@ -61,14 +81,16 @@ final class Background {
 	 */
 	public function register() {
 		add_action( self::HOOK, array( $this, 'run' ) );
+		add_action( Plugin::CRON_HOOK, array( $this, 'watchdog' ) );
 	}
 
 	/**
-	 * Current state.
+	 * Current state, read from the database.
 	 *
-	 * @return array{operation:string,status:string,cursor:int,processed:int,total:int,errors:array,started:int,updated:int,options:array}|null
+	 * @return array|null
 	 */
 	public function state() {
+		wp_cache_delete( self::OPTION, 'options' );
 		$state = get_option( self::OPTION );
 		return is_array( $state ) ? $state : null;
 	}
@@ -95,21 +117,19 @@ final class Background {
 			return false;
 		}
 
-		$total = $this->bulk->remaining( $operation );
-		update_option(
-			self::OPTION,
+		$this->write(
 			array(
+				'token'     => wp_generate_password( 16, false ),
 				'operation' => $operation,
 				'status'    => 'running',
 				'cursor'    => 0,
 				'processed' => 0,
-				'total'     => max( 0, $total ),
+				'total'     => max( 0, $this->bulk->remaining( $operation ) ),
 				'errors'    => array(),
 				'started'   => time(),
 				'updated'   => time(),
 				'options'   => $options,
-			),
-			false
+			)
 		);
 
 		$this->schedule( 0 );
@@ -126,7 +146,7 @@ final class Background {
 		if ( $state && 'running' === $state['status'] ) {
 			$state['status']  = 'stopped';
 			$state['updated'] = time();
-			update_option( self::OPTION, $state, false );
+			$this->write( $state );
 		}
 		wp_clear_scheduled_hook( self::HOOK );
 	}
@@ -137,13 +157,23 @@ final class Background {
 	 * @return void
 	 */
 	public function nudge() {
-		if ( ! $this->is_running() ) {
-			return;
-		}
-		if ( ! wp_next_scheduled( self::HOOK ) ) {
+		if ( $this->is_running() && ! wp_next_scheduled( self::HOOK ) && ! $this->is_locked() ) {
 			$this->schedule( 0 );
 		}
-		spawn_cron();
+		if ( $this->is_running() ) {
+			spawn_cron();
+		}
+	}
+
+	/**
+	 * Hourly: resumes runs whose slice died without rescheduling.
+	 *
+	 * @return void
+	 */
+	public function watchdog() {
+		if ( $this->is_running() && ! wp_next_scheduled( self::HOOK ) && ! $this->is_locked() ) {
+			$this->schedule( 0 );
+		}
 	}
 
 	/**
@@ -152,13 +182,18 @@ final class Background {
 	 * @return void
 	 */
 	public function run() {
-		if ( ! $this->is_running() || get_transient( self::LOCK ) ) {
+		$state = $this->state();
+		if ( ! $state || 'running' !== $state['status'] || ! $this->lock() ) {
 			return;
 		}
-		set_transient( self::LOCK, 1, 5 * MINUTE_IN_SECONDS );
 
+		if ( function_exists( 'set_time_limit' ) ) {
+			set_time_limit( self::SLICE + 300 ); // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- Uploads of large files in a cron request.
+		}
+
+		$token    = isset( $state['token'] ) ? $state['token'] : '';
 		$deadline = time() + self::SLICE;
-		$state    = $this->state();
+		$current  = true;
 
 		do {
 			$batch = $this->bulk->run( $state['operation'], $state['cursor'], 10, $state['options'] );
@@ -175,28 +210,86 @@ final class Background {
 			// Keep the latest 50 errors only.
 			$state['errors']  = array_slice( $state['errors'], -50, null, true );
 			$state['updated'] = time();
-
 			if ( $batch['done'] ) {
 				$state['status'] = 'done';
+			}
+
+			// Stopped or replaced meanwhile? Then this slice must not write anymore.
+			$fresh = $this->state();
+			if ( ! $fresh || ( isset( $fresh['token'] ) ? $fresh['token'] : '' ) !== $token || 'running' !== $fresh['status'] ) {
+				$current = false;
 				break;
 			}
 
-			// Stop requested meanwhile (another request changed the option).
-			$current = get_option( self::OPTION );
-			if ( ! is_array( $current ) || 'running' !== $current['status'] ) {
-				$state['status'] = is_array( $current ) ? $current['status'] : 'stopped';
-				break;
-			}
+			$this->write( $state );
+			$this->lock(); // Heartbeat.
+		} while ( 'running' === $state['status'] && time() < $deadline );
 
-			update_option( self::OPTION, $state, false );
-		} while ( time() < $deadline );
+		$this->unlock();
 
-		update_option( self::OPTION, $state, false );
-		delete_transient( self::LOCK );
-
-		if ( 'running' === $state['status'] ) {
+		if ( $current && 'running' === $state['status'] ) {
 			$this->schedule( 5 );
 		}
+	}
+
+	/**
+	 * Saves the state without autoloading.
+	 *
+	 * @param array $state State.
+	 * @return void
+	 */
+	private function write( array $state ) {
+		update_option( self::OPTION, $state, false );
+	}
+
+	/**
+	 * Acquires the lock, or refreshes it when this request holds it (heartbeat).
+	 *
+	 * add_option() is atomic (unique option name), so only one slice can win.
+	 *
+	 * @return bool
+	 */
+	private function lock() {
+		$expires = time() + self::STALE;
+
+		if ( $this->holds_lock ) {
+			update_option( self::LOCK, $expires, false );
+			return true;
+		}
+
+		if ( ! add_option( self::LOCK, $expires, '', false ) ) {
+			if ( $this->is_locked() ) {
+				return false; // Another slice is alive.
+			}
+			// Expired lock of a slice that died: take it over (again atomically).
+			delete_option( self::LOCK );
+			if ( ! add_option( self::LOCK, $expires, '', false ) ) {
+				return false;
+			}
+		}
+
+		$this->holds_lock = true;
+		return true;
+	}
+
+	/**
+	 * Releases the lock.
+	 *
+	 * @return void
+	 */
+	private function unlock() {
+		delete_option( self::LOCK );
+		$this->holds_lock = false;
+	}
+
+	/**
+	 * Whether a slice currently holds a valid lock.
+	 *
+	 * @return bool
+	 */
+	private function is_locked() {
+		wp_cache_delete( self::LOCK, 'options' );
+		return (int) get_option( self::LOCK ) > time();
 	}
 
 	/**

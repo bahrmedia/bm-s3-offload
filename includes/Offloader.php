@@ -595,16 +595,6 @@ final class Offloader {
 	}
 
 	/**
-	 * Opens the private scope for the rest of the request (BuddyBoss download
-	 * handler, which checks access itself before it requests the URL).
-	 *
-	 * @return void
-	 */
-	public function grant_private_access() {
-		++$this->private_scope;
-	}
-
-	/**
 	 * Whether an item may be delivered in the current context.
 	 *
 	 * Private objects get signed URLs only inside a trusted scope or for

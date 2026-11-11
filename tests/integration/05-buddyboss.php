@@ -116,6 +116,24 @@ bms3o_t( 'bucket' === bms3o_t_fetch_as( $email_url, 0 ), 'E-mail links (signed r
 $forged = preg_replace( '#/[^/]+$#', '/' . base64_encode( 'receiver_' . $anna . '_forged' ), $email_url );
 bms3o_t( 'denied' === bms3o_t_fetch_as( $forged, 0 ), 'Forged receiver segment is denied' );
 
+bms3o_t_section( 'BuddyBoss downloads' );
+
+$download = add_query_arg(
+	array(
+		'attachment_id'       => $private['attachment_id'],
+		'download_media_file' => 1,
+		'media_file'          => $private['media_id'],
+		'media_type'          => 'media',
+	),
+	$site . '/'
+);
+$owner = bms3o_t_get( $download, bms3o_t_cookie( $anna ) );
+bms3o_t( 200 === $owner['code'] && strlen( $owner['body'] ) > 1000, 'Owner can download her private photo (local copy removed)', $owner['code'] );
+$other = bms3o_t_get( $download, bms3o_t_cookie( $ben ) );
+bms3o_t( 200 !== $other['code'] || strlen( $other['body'] ) < 1000, 'Other members cannot download it' );
+$bypass = bms3o_t_get( add_query_arg( array( 'attachment_id' => $private['attachment_id'], 'download_media_file' => 1 ), $site . '/' ) );
+bms3o_t( false === strpos( $bypass['location'] . $bypass['body'], 'X-Amz' ), 'Incomplete download parameters never yield a signed URL', $bypass['location'] );
+
 bms3o_t_settings( array( 'bb_delivery' => 'direct' ) );
 $direct = bp_media_get_preview_image_url( $public['media_id'], $public['attachment_id'], 'bb-media-activity-image' );
 bms3o_t( false !== strpos( $direct, 'X-Amz-Signature' ) && 200 === bms3o_t_status( $direct ), 'Direct mode embeds signed bucket URLs', $direct );

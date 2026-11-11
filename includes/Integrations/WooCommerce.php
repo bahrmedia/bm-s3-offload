@@ -95,6 +95,11 @@ final class WooCommerce {
 			return $file_path;
 		}
 
+		// Restricted files of other plugins (e.g. BuddyBoss media) are never handed out as product files.
+		if ( $this->offloader->is_restricted( $item ) && 0 !== strpos( $item['path'], 'woocommerce_uploads/' ) ) {
+			return $file_path;
+		}
+
 		$offloader = $this->offloader;
 		$url       = $offloader->with_private_access(
 			static function () use ( $offloader, $item ) {

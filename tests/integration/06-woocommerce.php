@@ -80,6 +80,24 @@ bms3o_t( false !== strpos( (string) wp_remote_retrieve_header( $bucket, 'content
 $forged = bms3o_t_get( add_query_arg( 'key', 'wc_order_forged', $url ) );
 bms3o_t( 302 !== $forged['code'] || false === strpos( $forged['location'], 'X-Amz' ), 'Invalid order key gets no bucket URL' );
 
+// A product file pointing to another plugin's restricted media must not be signed.
+$bb_dir = $offloader->uploads()['basedir'] . '/bb_medias/bms3o-wc';
+wp_mkdir_p( $bb_dir );
+file_put_contents( $bb_dir . '/member.jpg', random_bytes( 1000 ) );
+$member_id = wp_insert_attachment(
+	array(
+		'post_title'     => 'member photo',
+		'post_mime_type' => 'image/jpeg',
+		'post_status'    => 'inherit',
+	),
+	$bb_dir . '/member.jpg'
+);
+wp_update_attachment_metadata( $member_id, array() );
+$wc_integration = new BahrMedia\S3Offload\Integrations\WooCommerce( $offloader );
+$member_url     = $offloader->uploads()['baseurl'] . '/bb_medias/bms3o-wc/member.jpg';
+bms3o_t( $member_url === $wc_integration->filter_file_path( $member_url ), 'Restricted files of other plugins are never signed as product downloads' );
+wp_delete_attachment( $member_id, true );
+
 $order->delete( true );
 $product->delete( true );
 wp_delete_attachment( $attachment_id, true );

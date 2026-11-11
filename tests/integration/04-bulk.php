@@ -61,7 +61,7 @@ bms3o_t( $background->start( 'download' ), 'Background operation started' );
 bms3o_t( ! $background->start( 'offload' ), 'A second operation is refused while one is running' );
 $slices = 0;
 while ( $slices < 10 && $background->is_running() ) {
-	delete_transient( Background::LOCK );
+	delete_option( Background::LOCK );
 	do_action( Background::HOOK );
 	++$slices;
 }
@@ -76,9 +76,21 @@ $background->stop();
 // already, or may even re-add a stale cron event. What matters: nothing runs.
 $before = $background->state();
 bms3o_t( ! $background->is_running() && in_array( $before['status'], array( 'stopped', 'done' ), true ), 'Background operation can be stopped', $before );
-delete_transient( Background::LOCK );
+delete_option( Background::LOCK );
 do_action( Background::HOOK );
 bms3o_t( $background->state() === $before, 'A stale cron event after stopping does nothing' );
+
+// Stop written by another request (directly in the database, not via this
+// request's option cache) must win over a running slice.
+$background->stop();
+bms3o_t( $background->start( 'download' ), 'Start for the cache test' );
+get_option( Background::OPTION ); // Warm this request's cache with "running".
+$stopped           = $background->state();
+$stopped['status'] = 'stopped';
+$GLOBALS['wpdb']->update( $GLOBALS['wpdb']->options, array( 'option_value' => maybe_serialize( $stopped ) ), array( 'option_name' => Background::OPTION ) );
+delete_option( Background::LOCK );
+do_action( Background::HOOK );
+bms3o_t( 'stopped' === $background->state()['status'], 'A stop from another request is not overwritten by a running slice' );
 
 bms3o_t_section( 'Verify' );
 
@@ -102,6 +114,28 @@ bms3o_t( null !== $offloader->items()->get( $main . '.webp' ), 'photo.png.webp i
 bms3o_t( ! file_exists( $offloader->absolute( $main . '.webp' ) ), 'Its local copy is removed as well' );
 $html = apply_filters( 'the_content', '<picture><source srcset="' . $offloader->uploads()['baseurl'] . '/' . $main . '.webp"></picture>' );
 bms3o_t( false === strpos( $html, $offloader->uploads()['baseurl'] ), 'WebP URLs in content are rewritten' );
+
+// "owner.png.webp" uploaded as an attachment of its own must not be claimed by "owner.png".
+$owner      = bms3o_t_import( bms3o_t_image( 200, 200, 'owner.png' ) );
+$owner_file = get_post_meta( $owner, '_wp_attached_file', true );
+$webp       = $offloader->absolute( $owner_file ) . '.webp';
+copy( $offloader->absolute( $owner_file ), $webp );
+$other = wp_insert_attachment(
+	array(
+		'post_title'     => 'separate webp',
+		'post_mime_type' => 'image/webp',
+		'post_status'    => 'inherit',
+	),
+	$webp
+);
+bms3o_t( ! in_array( $owner_file . '.webp', $media->paths( $owner ), true ), 'A sidecar-like file that is its own attachment is not claimed' );
+wp_update_attachment_metadata( $other, array() );
+$media->offload( $owner, null, true, true );
+$offloader->process_removal_queue();
+bms3o_t( file_exists( $webp ) || $offloader->items()->get( $owner_file . '.webp' )['source_id'] === $other, 'The other attachment keeps its file', $offloader->items()->get( $owner_file . '.webp' ) );
+wp_delete_attachment( $owner, true );
+bms3o_t( null !== $offloader->items()->get( $owner_file . '.webp' ), 'Deleting the first attachment keeps the other one\'s object' );
+wp_delete_attachment( $other, true );
 
 foreach ( array_merge( $ids, array( $sidecar_id ) ) as $id ) {
 	wp_delete_attachment( $id, true );

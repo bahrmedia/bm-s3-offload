@@ -162,12 +162,20 @@ final class Attachments {
 			$sidecars[] = $path . '.webp';
 			$sidecars[] = $path . '.avif';
 		}
-		$known = $this->offloader->items()->get_many( $sidecars );
+		$known      = $this->offloader->items()->get_many( $sidecars );
+		$candidates = array();
 		foreach ( $sidecars as $sidecar ) {
-			if ( isset( $known[ $sidecar ] ) || is_file( $this->offloader->absolute( $sidecar ) ) ) {
-				$paths[] = $sidecar;
+			if ( isset( $known[ $sidecar ] ) ) {
+				// Only our own sidecars, never another source's file.
+				if ( Items::SOURCE_POST === $known[ $sidecar ]['source_type'] && (int) $attachment_id === $known[ $sidecar ]['source_id'] ) {
+					$paths[] = $sidecar;
+				}
+			} elseif ( is_file( $this->offloader->absolute( $sidecar ) ) ) {
+				$candidates[] = $sidecar;
 			}
 		}
+		// A file like "photo.jpg.webp" may also be an attachment of its own.
+		$paths = array_merge( $paths, array_diff( $candidates, self::attached_files( $candidates ) ) );
 
 		/**
 		 * Filters the files that belong to an attachment.
@@ -179,6 +187,23 @@ final class Attachments {
 		$paths = (array) apply_filters( 'bms3o_attachment_paths', $paths, $attachment_id, $meta );
 
 		return array_values( array_unique( array_filter( $paths, 'strlen' ) ) );
+	}
+
+	/**
+	 * Which of the given relative paths are the main file of an attachment.
+	 *
+	 * @param string[] $paths Relative paths.
+	 * @return string[]
+	 */
+	private static function attached_files( array $paths ) {
+		global $wpdb;
+		if ( empty( $paths ) ) {
+			return array();
+		}
+		$placeholders = implode( ',', array_fill( 0, count( $paths ), '%s' ) );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+		$found = $wpdb->get_col( $wpdb->prepare( "SELECT meta_value FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attached_file' AND meta_value IN ({$placeholders})", $paths ) );
+		return array_map( 'strval', (array) $found );
 	}
 
 	/**
@@ -252,9 +277,13 @@ final class Attachments {
 			return array( $file => __( 'Files in protected directories (BuddyBoss, WooCommerce, Easy Digital Downloads) cannot be made public.', 'bm-s3-offload' ) );
 		}
 
-		update_post_meta( $attachment_id, self::META_PRIVATE, $is_private ? '1' : '0' );
-		$paths = array_keys( $this->offloader->items()->get_by_source( Items::SOURCE_POST, (int) $attachment_id ) );
-		return $this->offloader->set_privacy( $paths, (bool) $is_private );
+		$paths  = array_keys( $this->offloader->items()->get_by_source( Items::SOURCE_POST, (int) $attachment_id ) );
+		$errors = $this->offloader->set_privacy( $paths, (bool) $is_private );
+		if ( empty( $errors ) ) {
+			// Only on success; otherwise the next offload moves files back to the stored state.
+			update_post_meta( $attachment_id, self::META_PRIVATE, $is_private ? '1' : '0' );
+		}
+		return $errors;
 	}
 
 	/**
@@ -413,8 +442,8 @@ final class Attachments {
 		$data = is_array( $data ) ? $data : array();
 		if ( $this->should_defer( (int) $attachment_id, $data ) ) {
 			if ( ! wp_next_scheduled( self::ASYNC_HOOK, array( (int) $attachment_id ) ) ) {
-				wp_schedule_single_event( time(), self::ASYNC_HOOK, array( (int) $attachment_id ) );
-				spawn_cron();
+				// Delayed, so the upload request can finish creating all image sizes first.
+				wp_schedule_single_event( time() + MINUTE_IN_SECONDS, self::ASYNC_HOOK, array( (int) $attachment_id ) );
 			}
 			return $data;
 		}
@@ -510,10 +539,13 @@ final class Attachments {
 		$info      = pathinfo( $filename );
 		$name      = $info['filename'];
 		$extension = isset( $info['extension'] ) ? '.' . $info['extension'] : '';
+
+		// One indexed query for all candidates ("name", "name-1", "name-2", ...).
+		$taken     = array_keys( $this->offloader->items()->get_with_prefix( $relative_dir . $name ) );
 		$candidate = $filename;
 		$number    = 1;
 
-		while ( $this->name_taken( $relative_dir, $candidate ) || file_exists( $dir . '/' . $candidate ) ) {
+		while ( $this->name_taken( $taken, $relative_dir, $candidate ) || file_exists( $dir . '/' . $candidate ) ) {
 			$candidate = $name . '-' . $number . $extension;
 			++$number;
 		}
@@ -524,18 +556,16 @@ final class Attachments {
 	/**
 	 * Whether a file name (or one of its image size variants) is used by an offloaded item.
 	 *
-	 * @param string $relative_dir Relative directory with trailing slash ('' for the root).
-	 * @param string $filename     File name.
+	 * @param string[] $taken        Offloaded paths starting with the base name.
+	 * @param string   $relative_dir Relative directory with trailing slash ('' for the root).
+	 * @param string   $filename     File name.
 	 * @return bool
 	 */
-	private function name_taken( $relative_dir, $filename ) {
-		$name   = pathinfo( $filename, PATHINFO_FILENAME );
-		$items  = $this->offloader->items()->get_with_prefix( $relative_dir . $name, 500 );
-		$prefix = preg_quote( $relative_dir . $name, '#' );
-
-		foreach ( array_keys( $items ) as $path ) {
+	private function name_taken( array $taken, $relative_dir, $filename ) {
+		$prefix = preg_quote( $relative_dir . pathinfo( $filename, PATHINFO_FILENAME ), '#' );
+		foreach ( $taken as $path ) {
 			// The file itself, or a size variant like "name-300x200.jpg" / "name-scaled.jpg".
-			if ( $path === $relative_dir . $filename || preg_match( '#^' . $prefix . '(?:-\d+x\d+|-scaled|-rotated)\.[^./]+$#i', $path ) ) {
+			if ( $path === $relative_dir . $filename || preg_match( '#^' . $prefix . '(?:-\\d+x\\d+|-scaled|-rotated)\\.[^./]+$#i', $path ) ) {
 				return true;
 			}
 		}

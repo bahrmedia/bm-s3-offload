@@ -122,7 +122,7 @@ final class MediaLibrary {
 		global $wpdb;
 
 		$filter = self::current_filter();
-		if ( '' === $filter || ! $query->is_main_query() || 'attachment' !== $query->get( 'post_type' ) ) {
+		if ( '' === $filter || ! is_admin() || ! $query->is_main_query() || 'attachment' !== $query->get( 'post_type' ) ) {
 			return $where;
 		}
 
