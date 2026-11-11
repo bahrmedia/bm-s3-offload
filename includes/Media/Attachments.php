@@ -265,6 +265,33 @@ final class Attachments {
 	}
 
 	/**
+	 * Whether BuddyBoss media are stored privately (setting).
+	 *
+	 * @return bool
+	 */
+	public function buddyboss_private() {
+		return (bool) $this->offloader->settings()->get( 'bb_private' );
+	}
+
+	/**
+	 * Moves the objects of an attachment to the privacy it should have now
+	 * (e.g. after the "private media" setting was changed).
+	 *
+	 * @param int $attachment_id Attachment ID.
+	 * @return array<string,string> Errors by path.
+	 */
+	public function sync_privacy( $attachment_id ) {
+		$target = $this->is_private( (int) $attachment_id );
+		$paths  = array();
+		foreach ( $this->offloader->items()->get_by_source( Items::SOURCE_POST, (int) $attachment_id ) as $path => $item ) {
+			if ( (bool) $item['is_private'] !== $target ) {
+				$paths[] = $path;
+			}
+		}
+		return empty( $paths ) ? array() : $this->offloader->set_privacy( $paths, $target );
+	}
+
+	/**
 	 * Makes an attachment private (expiring signed URLs) or public.
 	 *
 	 * @param int  $attachment_id Attachment ID.

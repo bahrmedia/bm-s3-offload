@@ -404,7 +404,13 @@ final class SettingsPage {
 
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Sanitized per field in Settings::save().
 		$input  = isset( $_POST['bms3o'] ) && is_array( $_POST['bms3o'] ) ? wp_unslash( $_POST['bms3o'] ) : array();
-		$errors = $this->plugin->settings->save( $input );
+		$was_private = (bool) $this->plugin->settings->get( 'bb_private' );
+		$errors      = $this->plugin->settings->save( $input );
+
+		// Existing BuddyBoss objects follow a changed "private media" setting (in the background).
+		if ( (bool) $this->plugin->settings->get( 'bb_private' ) !== $was_private && $this->plugin->bulk->remaining( 'sync_privacy' ) > 0 ) {
+			$this->plugin->background->start( 'sync_privacy' );
+		}
 		if ( ! empty( $errors ) ) {
 			set_transient( 'bms3o_save_errors_' . get_current_user_id(), $errors, MINUTE_IN_SECONDS );
 		}
@@ -458,6 +464,9 @@ final class SettingsPage {
 			$this->bulk_card( 'offload', __( 'Offload existing media', 'bm-s3-offload' ), __( 'Uploads all media that are not in the bucket yet.', 'bm-s3-offload' ), true );
 			$this->bulk_card( 'remove_local', __( 'Remove local copies', 'bm-s3-offload' ), __( 'Deletes local copies of offloaded media after verifying each object in the bucket.', 'bm-s3-offload' ) );
 			$this->bulk_card( 'download', __( 'Restore local copies', 'bm-s3-offload' ), __( 'Downloads all files that only exist in the bucket back to this server.', 'bm-s3-offload' ) );
+			if ( $this->plugin->bulk->remaining( 'sync_privacy' ) > 0 ) {
+				$this->bulk_card( 'sync_privacy', __( 'Apply BuddyBoss privacy setting', 'bm-s3-offload' ), __( 'Moves existing BuddyBoss media to the private or public area according to the "private media" setting.', 'bm-s3-offload' ) );
+			}
 			if ( BuddyBoss::is_active() ) {
 				$this->bulk_card( 'bb_sync', __( 'BuddyBoss avatars and covers', 'bm-s3-offload' ), __( 'Mirrors all existing member and group avatars and cover images to the bucket.', 'bm-s3-offload' ) );
 			}
@@ -636,6 +645,7 @@ final class SettingsPage {
 			'download'     => __( 'Restore local copies', 'bm-s3-offload' ),
 			'bb_sync'      => __( 'BuddyBoss avatars and covers', 'bm-s3-offload' ),
 			'unoffload'    => __( 'Leave the bucket', 'bm-s3-offload' ),
+			'sync_privacy' => __( 'Apply BuddyBoss privacy setting', 'bm-s3-offload' ),
 		);
 		return isset( $labels[ $operation ] ) ? $labels[ $operation ] : $operation;
 	}

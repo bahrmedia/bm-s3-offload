@@ -71,6 +71,23 @@ function bms3o_t_bb_photo( $user_id, $privacy, $group_id = 0 ) {
 }
 
 /**
+ * Switches the user for WordPress and BuddyBoss (BuddyBoss caches the logged-in user).
+ *
+ * @param int $user_id User ID (0 = logged out).
+ * @return void
+ */
+function bms3o_t_bb_login( $user_id ) {
+	wp_set_current_user( $user_id );
+	remove_all_filters( 'bp_loggedin_user_id' );
+	add_filter(
+		'bp_loggedin_user_id',
+		static function () use ( $user_id ) {
+			return $user_id;
+		}
+	);
+}
+
+/**
  * Result of requesting a URL as a user: 'bucket' (redirect to a reachable
  * bucket URL), 'denied' or the HTTP status.
  *
@@ -145,7 +162,31 @@ bms3o_t( false === strpos( $bypass['location'] . $bypass['body'], 'X-Amz' ), 'In
 bms3o_t_settings( array( 'bb_delivery' => 'direct' ) );
 $direct = bp_media_get_preview_image_url( $public['media_id'], $public['attachment_id'], 'bb-media-activity-image' );
 bms3o_t( false !== strpos( $direct, 'X-Amz-Signature' ) && 200 === bms3o_t_status( $direct ), 'Direct mode embeds signed bucket URLs', $direct );
+bms3o_t_bb_login( $ben );
+$foreign = bp_media_get_preview_image_url( $private['media_id'], $private['attachment_id'], 'bb-media-activity-image' );
+bms3o_t( false === strpos( $foreign, 'X-Amz' ) && false !== strpos( $foreign, '/bb-media-preview/' ), 'Direct mode: no signed URL for media the user may not see (any listing)', $foreign );
+bms3o_t_bb_login( $anna );
+$own = bp_media_get_preview_image_url( $private['media_id'], $private['attachment_id'], 'bb-media-activity-image' );
+bms3o_t( false !== strpos( $own, 'X-Amz-Signature' ), 'Direct mode: signed URL for the owner' );
+bms3o_t_bb_login( 0 );
 bms3o_t_settings( array( 'bb_delivery' => 'proxy' ) );
+
+bms3o_t_section( 'BuddyBoss privacy setting changes' );
+
+bms3o_t_settings( array( 'bb_private' => false ) );
+do {
+	$batch = $plugin->bulk->run( 'sync_privacy', 0, 50 );
+} while ( ! $batch['done'] );
+bms3o_t( ! $offloader->items()->get( $file )['is_private'], 'Turning "private media" off moves existing objects to the public prefix' );
+bms3o_t_settings( array( 'bb_private' => true ) );
+bms3o_t( $plugin->bulk->remaining( 'sync_privacy' ) > 0, 'Turning it on again reports pending objects' );
+do {
+	$batch = $plugin->bulk->run( 'sync_privacy', 0, 50 );
+} while ( ! $batch['done'] );
+$item = $offloader->items()->get( $file );
+bms3o_t( $item['is_private'] && 403 === bms3o_t_status( $plugin->settings->client()->object_url( $item['object_key'] ) ) && 0 === $plugin->bulk->remaining( 'sync_privacy' ), 'Existing objects are private again and not publicly readable' );
+
+bms3o_t( false === apply_filters( 'bb_media_check_default_access', false ) || $plugin->settings->get( 'remove_local' ), 'BuddyBoss keeps checking direct access while local copies exist' );
 
 bms3o_t_section( 'BuddyBoss private group' );
 

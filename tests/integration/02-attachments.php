@@ -65,6 +65,20 @@ $saved   = get_post_field( 'post_content', $post_id, 'raw' );
 bms3o_t( false !== strpos( $saved, $local ) && false === strpos( $saved, $url ) && false === strpos( $saved, $thumb ), 'Bucket URLs are saved as local URLs', $saved );
 wp_delete_post( $post_id, true );
 
+// Encoded markup in a bucket-looking URL must never be decoded into the stored content.
+$bucket_base = substr( $url, 0, strpos( $url, $offloader->key_prefix( false ) ) + strlen( $offloader->key_prefix( false ) ) );
+$evil        = $bucket_base . 'a%22%20onmouseover%3Dalert%281%29%20x%3Cimg%20src%3Dx%20onerror%3Dalert%282%29%3E.jpg';
+$post_id     = wp_insert_post(
+	array(
+		'post_title'   => 'bms3o xss',
+		'post_status'  => 'draft',
+		'post_content' => '<a href="' . $evil . '">x</a>',
+	)
+);
+$saved = get_post_field( 'post_content', $post_id, 'raw' );
+bms3o_t( false === strpos( $saved, 'onmouseover=' ) && false === strpos( $saved, '<img' ), 'Encoded markup in URLs is not decoded on save (no stored XSS)', $saved );
+wp_delete_post( $post_id, true );
+
 bms3o_t_section( 'Remove local copies' );
 
 $removed = $media->remove_local( $id );
@@ -108,6 +122,21 @@ $file1  = get_post_meta( $first, '_wp_attached_file', true );
 $file2  = get_post_meta( $second, '_wp_attached_file', true );
 bms3o_t( $file1 !== $file2, 'Second upload gets its own file name', array( $file1, $file2 ) );
 bms3o_t( count( $offloader->items()->get_by_source( 'attachment', $second ) ) > 0, 'Second upload is offloaded' );
+
+bms3o_t_section( 'Changed files with the same size' );
+
+$same      = bms3o_t_import( bms3o_t_image( 300, 300, 'same-size.png' ) );
+$same_file = get_attached_file( $same );
+$same_path = get_post_meta( $same, '_wp_attached_file', true );
+$original  = file_get_contents( $same_file );
+$changed   = substr( $original, 0, -1 ) . chr( ( ord( substr( $original, -1 ) ) + 1 ) % 256 );
+file_put_contents( $same_file, $changed );
+touch( $same_file, time() + 5 );
+clearstatcache();
+$result = $media->offload( $same );
+bms3o_t( in_array( $same_path, $result['uploaded'], true ), 'A replaced file of the same size is uploaded again', $result );
+bms3o_t( $changed === $plugin->settings->client()->get_string( $offloader->items()->get( $same_path )['object_key'] ), 'The bucket has the new content' );
+wp_delete_attachment( $same, true );
 
 bms3o_t_section( 'Restore and leave the bucket' );
 

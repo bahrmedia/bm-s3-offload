@@ -35,3 +35,8 @@ All notable changes to this project are documented in this file. The format foll
 - BuddyBoss media directories stay private even when the BuddyBoss integration is switched off.
 - Prefix combinations that would place private files in the public area are rejected.
 - On multisite the settings are reserved to super admins.
+- BuddyBoss: signed URLs in "direct" mode and for documents/videos only after BuddyBoss' access check for the current user; downloads only inside BuddyBoss' own download functions.
+- Bucket/CDN URLs in saved content are only mapped back to known files (no decoding of user input after sanitisation).
+- Changing the BuddyBoss "private media" setting moves existing objects (background operation).
+- BuddyBoss' direct-access self-test stays active while local copies exist.
+- Change detection by size and modification time; multi-network sites get separate keys.

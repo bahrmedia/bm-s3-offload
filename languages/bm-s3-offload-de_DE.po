@@ -10,7 +10,7 @@ msgstr ""
 "Language: de_DE\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-11T22:25:17+00:00\n"
+"POT-Creation-Date: 2026-11-11T22:52:11+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: bm-s3-offload\n"
@@ -40,87 +40,96 @@ msgstr "Bahr Media"
 msgid "https://bahrmedia.de"
 msgstr "https://bahrmedia.de"
 
-#: includes/Admin/MediaLibrary.php:61
+#: includes/Admin/MediaLibrary.php:62
 msgid "Offload to bucket"
 msgstr "In den Bucket auslagern"
 
-#: includes/Admin/MediaLibrary.php:62
+#: includes/Admin/MediaLibrary.php:63
 msgid "Remove local copy"
 msgstr "Lokale Kopie entfernen"
 
-#: includes/Admin/MediaLibrary.php:63
+#: includes/Admin/MediaLibrary.php:64
 msgid "Restore local copy"
 msgstr "Lokale Kopie wiederherstellen"
 
-#: includes/Admin/MediaLibrary.php:64
+#: includes/Admin/MediaLibrary.php:65
 msgid "Remove from bucket"
 msgstr "Aus dem Bucket entfernen"
 
-#: includes/Admin/MediaLibrary.php:65
+#: includes/Admin/MediaLibrary.php:66
 msgid "Make private (signed URLs)"
 msgstr "Privat machen (signierte URLs)"
 
-#: includes/Admin/MediaLibrary.php:66
+#: includes/Admin/MediaLibrary.php:67
 msgid "Make public"
 msgstr "Öffentlich machen"
 
-#: includes/Admin/MediaLibrary.php:77
+#: includes/Admin/MediaLibrary.php:78
 msgid "In bucket"
 msgstr "Im Bucket"
 
-#: includes/Admin/MediaLibrary.php:78
-#: includes/Admin/MediaLibrary.php:175
-#: includes/Admin/MediaLibrary.php:398
+#: includes/Admin/MediaLibrary.php:79
+#: includes/Admin/MediaLibrary.php:176
+#: includes/Admin/MediaLibrary.php:416
+#: includes/Admin/MediaLibrary.php:445
 msgid "Local only"
 msgstr "Nur lokal"
 
-#: includes/Admin/MediaLibrary.php:79
-#: includes/Admin/MediaLibrary.php:179
-#: includes/Admin/MediaLibrary.php:395
+#: includes/Admin/MediaLibrary.php:80
+#: includes/Admin/MediaLibrary.php:180
+#: includes/Admin/MediaLibrary.php:411
+#: includes/Admin/MediaLibrary.php:442
 msgid "In bucket only"
 msgstr "Nur im Bucket"
 
-#: includes/Admin/MediaLibrary.php:80
+#: includes/Admin/MediaLibrary.php:81
 msgid "Private"
 msgstr "Privat"
 
-#: includes/Admin/MediaLibrary.php:106
+#: includes/Admin/MediaLibrary.php:107
 msgid "Filter by storage"
 msgstr "Nach Speicherort filtern"
 
-#: includes/Admin/MediaLibrary.php:107
+#: includes/Admin/MediaLibrary.php:108
 msgid "All storage states"
 msgstr "Alle Speicherorte"
 
-#: includes/Admin/MediaLibrary.php:149
+#: includes/Admin/MediaLibrary.php:150
 #: includes/Admin/SettingsPage.php:212
 msgid "Bucket"
 msgstr "Bucket"
 
-#: includes/Admin/MediaLibrary.php:179
-#: includes/Admin/MediaLibrary.php:395
+#: includes/Admin/MediaLibrary.php:180
+#: includes/Admin/MediaLibrary.php:411
+#: includes/Admin/MediaLibrary.php:442
 msgid "In bucket and local"
 msgstr "Im Bucket und lokal"
 
-#: includes/Admin/MediaLibrary.php:181
+#: includes/Admin/MediaLibrary.php:182
+#: includes/Admin/MediaLibrary.php:413
 msgid "private"
 msgstr "privat"
 
-#: includes/Admin/MediaLibrary.php:276
+#: includes/Admin/MediaLibrary.php:277
 #: includes/Admin/SettingsPage.php:401
-#: includes/Admin/SettingsPage.php:548
+#: includes/Admin/SettingsPage.php:557
 msgid "You are not allowed to do this."
 msgstr "Du darfst diese Aktion nicht ausführen."
 
 #. translators: 1: number of successful items, 2: number of failed items
-#: includes/Admin/MediaLibrary.php:374
+#: includes/Admin/MediaLibrary.php:375
 #, php-format
 msgid "S3 Offload: %1$d done, %2$d failed."
 msgstr "S3 Offload: %1$d erledigt, %2$d fehlgeschlagen."
 
-#: includes/Admin/MediaLibrary.php:376
+#: includes/Admin/MediaLibrary.php:377
 msgid "Run the connection test"
 msgstr "Verbindungstest ausführen"
+
+#: includes/Admin/MediaLibrary.php:395
+#: includes/Admin/SettingsPage.php:186
+msgid "Storage"
+msgstr "Speicher"
 
 #: includes/Admin/SettingsPage.php:88
 #: includes/Admin/SettingsPage.php:153
@@ -145,7 +154,7 @@ msgid "Stopped."
 msgstr "Angehalten."
 
 #: includes/Admin/SettingsPage.php:126
-#: includes/Admin/SettingsPage.php:453
+#: includes/Admin/SettingsPage.php:459
 msgid "Stop"
 msgstr "Anhalten"
 
@@ -180,10 +189,6 @@ msgstr "Hintergrundverarbeitung angehalten"
 #: includes/Admin/SettingsPage.php:156
 msgid "Tools"
 msgstr "Werkzeuge"
-
-#: includes/Admin/SettingsPage.php:186
-msgid "Storage"
-msgstr "Speicher"
 
 #: includes/Admin/SettingsPage.php:195
 msgid "Provider"
@@ -274,8 +279,8 @@ msgid "Copy new and edited media to the bucket automatically."
 msgstr "Neue und bearbeitete Medien automatisch in den Bucket kopieren."
 
 #: includes/Admin/SettingsPage.php:238
-#: includes/Admin/SettingsPage.php:459
-#: includes/Admin/SettingsPage.php:635
+#: includes/Admin/SettingsPage.php:465
+#: includes/Admin/SettingsPage.php:644
 msgid "Remove local copies"
 msgstr "Lokale Kopien entfernen"
 
@@ -417,154 +422,163 @@ msgstr "•••••••• (gespeichert – leer lassen, um ihn zu behalte
 msgid "Defined by %s."
 msgstr "Festgelegt durch %s."
 
-#: includes/Admin/SettingsPage.php:432
+#: includes/Admin/SettingsPage.php:438
 msgid "Status"
 msgstr "Status"
 
-#: includes/Admin/SettingsPage.php:435
+#: includes/Admin/SettingsPage.php:441
 msgid "Offloaded files"
 msgstr "Ausgelagerte Dateien"
 
-#: includes/Admin/SettingsPage.php:436
+#: includes/Admin/SettingsPage.php:442
 msgid "Size in bucket"
 msgstr "Größe im Bucket"
 
-#: includes/Admin/SettingsPage.php:437
+#: includes/Admin/SettingsPage.php:443
 msgid "Without local copy"
 msgstr "Ohne lokale Kopie"
 
-#: includes/Admin/SettingsPage.php:438
+#: includes/Admin/SettingsPage.php:444
 msgid "Private files"
 msgstr "Private Dateien"
 
-#: includes/Admin/SettingsPage.php:439
+#: includes/Admin/SettingsPage.php:445
 msgid "Waiting for retry"
 msgstr "Warten auf erneuten Versuch"
 
-#: includes/Admin/SettingsPage.php:443
+#: includes/Admin/SettingsPage.php:449
 msgid "Connection test"
 msgstr "Verbindungstest"
 
-#: includes/Admin/SettingsPage.php:444
+#: includes/Admin/SettingsPage.php:450
 msgid "Uploads, reads and deletes a small test file and checks public and private delivery."
 msgstr "Lädt eine kleine Testdatei hoch, liest und löscht sie und prüft die öffentliche und private Auslieferung."
 
-#: includes/Admin/SettingsPage.php:445
+#: includes/Admin/SettingsPage.php:451
 msgid "Run connection test"
 msgstr "Verbindungstest starten"
 
-#: includes/Admin/SettingsPage.php:448
+#: includes/Admin/SettingsPage.php:454
 msgid "Bulk operations"
 msgstr "Massenverarbeitung"
 
-#: includes/Admin/SettingsPage.php:449
+#: includes/Admin/SettingsPage.php:455
 msgid "Run an operation in this browser window (keep the page open) or in the background (WP-Cron; you can close the page). For very large libraries, WP-CLI is fastest: wp bm-s3"
 msgstr "Die Verarbeitung läuft entweder in diesem Browserfenster (Seite geöffnet lassen) oder im Hintergrund (WP-Cron; die Seite darf geschlossen werden). Für sehr große Mediatheken ist WP-CLI am schnellsten: wp bm-s3"
 
-#: includes/Admin/SettingsPage.php:458
-#: includes/Admin/SettingsPage.php:634
+#: includes/Admin/SettingsPage.php:464
+#: includes/Admin/SettingsPage.php:643
 msgid "Offload existing media"
 msgstr "Vorhandene Medien auslagern"
 
-#: includes/Admin/SettingsPage.php:458
+#: includes/Admin/SettingsPage.php:464
 msgid "Uploads all media that are not in the bucket yet."
 msgstr "Lädt alle Medien hoch, die noch nicht im Bucket sind."
 
-#: includes/Admin/SettingsPage.php:459
+#: includes/Admin/SettingsPage.php:465
 msgid "Deletes local copies of offloaded media after verifying each object in the bucket."
 msgstr "Löscht die lokalen Kopien ausgelagerter Medien, nachdem jedes Objekt im Bucket geprüft wurde."
 
-#: includes/Admin/SettingsPage.php:460
-#: includes/Admin/SettingsPage.php:636
+#: includes/Admin/SettingsPage.php:466
+#: includes/Admin/SettingsPage.php:645
 msgid "Restore local copies"
 msgstr "Lokale Kopien wiederherstellen"
 
-#: includes/Admin/SettingsPage.php:460
+#: includes/Admin/SettingsPage.php:466
 msgid "Downloads all files that only exist in the bucket back to this server."
 msgstr "Lädt alle Dateien, die nur noch im Bucket liegen, zurück auf diesen Server."
 
-#: includes/Admin/SettingsPage.php:462
-#: includes/Admin/SettingsPage.php:637
+#: includes/Admin/SettingsPage.php:468
+#: includes/Admin/SettingsPage.php:648
+msgid "Apply BuddyBoss privacy setting"
+msgstr "BuddyBoss-Privatsphäre-Einstellung anwenden"
+
+#: includes/Admin/SettingsPage.php:468
+msgid "Moves existing BuddyBoss media to the private or public area according to the \"private media\" setting."
+msgstr "Verschiebt vorhandene BuddyBoss-Medien entsprechend der Einstellung \"Private Medien\" in den privaten oder öffentlichen Bereich."
+
+#: includes/Admin/SettingsPage.php:471
+#: includes/Admin/SettingsPage.php:646
 msgid "BuddyBoss avatars and covers"
 msgstr "BuddyBoss-Profil- und Titelbilder"
 
-#: includes/Admin/SettingsPage.php:462
+#: includes/Admin/SettingsPage.php:471
 msgid "Mirrors all existing member and group avatars and cover images to the bucket."
 msgstr "Spiegelt alle vorhandenen Profil-, Gruppen- und Titelbilder in den Bucket."
 
-#: includes/Admin/SettingsPage.php:464
-#: includes/Admin/SettingsPage.php:638
+#: includes/Admin/SettingsPage.php:473
+#: includes/Admin/SettingsPage.php:647
 msgid "Leave the bucket"
 msgstr "Bucket verlassen"
 
-#: includes/Admin/SettingsPage.php:464
+#: includes/Admin/SettingsPage.php:473
 msgid "Restores every file locally and deletes it from the bucket. Use this before switching providers or uninstalling."
 msgstr "Stellt jede Datei lokal wieder her und löscht sie aus dem Bucket. Vor einem Anbieterwechsel oder der Deinstallation verwenden."
 
-#: includes/Admin/SettingsPage.php:468
+#: includes/Admin/SettingsPage.php:477
 msgid "Bucket policy"
 msgstr "Bucket-Policy"
 
-#: includes/Admin/SettingsPage.php:469
+#: includes/Admin/SettingsPage.php:478
 msgid "Example policy that makes only the public prefix readable. Private files and everything else stay protected."
 msgstr "Beispiel-Policy, die nur das öffentliche Präfix lesbar macht. Private Dateien und alles andere bleiben geschützt."
 
 #. translators: %s: number of items
-#: includes/Admin/SettingsPage.php:495
+#: includes/Admin/SettingsPage.php:504
 #, php-format
 msgid "Pending: %s"
 msgstr "Ausstehend: %s"
 
-#: includes/Admin/SettingsPage.php:499
+#: includes/Admin/SettingsPage.php:508
 msgid "Remove local copies afterwards"
 msgstr "Lokale Kopien anschließend entfernen"
 
-#: includes/Admin/SettingsPage.php:504
+#: includes/Admin/SettingsPage.php:513
 msgid "Start"
 msgstr "Starten"
 
-#: includes/Admin/SettingsPage.php:505
+#: includes/Admin/SettingsPage.php:514
 msgid "Run in background"
 msgstr "Im Hintergrund ausführen"
 
-#: includes/Admin/SettingsPage.php:573
-#: includes/Admin/SettingsPage.php:608
+#: includes/Admin/SettingsPage.php:582
+#: includes/Admin/SettingsPage.php:617
 msgid "Invalid request."
 msgstr "Ungültige Anfrage."
 
-#: includes/Admin/SettingsPage.php:611
+#: includes/Admin/SettingsPage.php:620
 msgid "Another background operation is running."
 msgstr "Es läuft bereits eine andere Hintergrundverarbeitung."
 
-#: includes/Admin/SettingsPage.php:667
+#: includes/Admin/SettingsPage.php:677
 msgid "The prefixes were not saved:"
 msgstr "Die Präfixe wurden nicht gespeichert:"
 
-#: includes/Admin/SettingsPage.php:673
+#: includes/Admin/SettingsPage.php:683
 msgid "Settings saved."
 msgstr "Einstellungen gespeichert."
 
 #. translators: %s: link to the settings
-#: includes/Admin/SettingsPage.php:681
+#: includes/Admin/SettingsPage.php:691
 #, php-format
 msgid "BM S3 Offload cannot decrypt the stored secret key, probably because the WordPress security keys (salts) were changed. Offloading is paused. %s"
 msgstr "BM S3 Offload kann den gespeicherten Secret Key nicht entschlüsseln, vermutlich wurden die WordPress-Sicherheitsschlüssel (Salts) geändert. Das Auslagern ist pausiert. %s"
 
-#: includes/Admin/SettingsPage.php:682
+#: includes/Admin/SettingsPage.php:692
 msgid "Enter the secret key again"
 msgstr "Secret Key erneut eingeben"
 
 #. translators: %s: link to the settings
-#: includes/Admin/SettingsPage.php:691
+#: includes/Admin/SettingsPage.php:701
 #, php-format
 msgid "BM S3 Offload is not configured yet. %s"
 msgstr "BM S3 Offload ist noch nicht eingerichtet. %s"
 
-#: includes/Admin/SettingsPage.php:692
+#: includes/Admin/SettingsPage.php:702
 msgid "Configure the bucket"
 msgstr "Bucket einrichten"
 
-#: includes/Admin/SettingsPage.php:698
+#: includes/Admin/SettingsPage.php:708
 msgid "The PHP extension SimpleXML is missing. Listing objects and error messages from the bucket will not work."
 msgstr "Die PHP-Erweiterung SimpleXML fehlt. Das Auflisten von Objekten und Fehlermeldungen des Buckets funktionieren nicht."
 
@@ -574,7 +588,7 @@ msgstr "Die PHP-Erweiterung SimpleXML fehlt. Das Auflisten von Objekten und Fehl
 msgid "Errors while synchronising %s"
 msgstr "Fehler beim Synchronisieren von %s"
 
-#: includes/Media/Attachments.php:252
+#: includes/Media/Attachments.php:304
 msgid "Files in protected directories (BuddyBoss, WooCommerce, Easy Digital Downloads) cannot be made public."
 msgstr "Dateien in geschützten Verzeichnissen (BuddyBoss, WooCommerce, Easy Digital Downloads) können nicht öffentlich gemacht werden."
 

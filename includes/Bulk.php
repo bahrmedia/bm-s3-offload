@@ -19,7 +19,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Bulk {
 
-	const OPERATIONS = array( 'offload', 'remove_local', 'download', 'unoffload', 'bb_sync' );
+	const OPERATIONS = array( 'offload', 'remove_local', 'download', 'unoffload', 'bb_sync', 'sync_privacy' );
 
 	/**
 	 * Attachments module.
@@ -138,6 +138,9 @@ final class Bulk {
 			case 'unoffload':
 				return self::first_error( $this->attachments->unoffload( $attachment_id ) );
 
+			case 'sync_privacy':
+				return self::first_error( $this->attachments->sync_privacy( $attachment_id ) );
+
 			case 'make_private':
 			case 'make_public':
 				return self::first_error( $this->attachments->set_privacy( $attachment_id, 'make_private' === $operation ) );
@@ -190,6 +193,18 @@ final class Bulk {
 				);
 				break;
 
+			case 'sync_privacy':
+				// BuddyBoss media whose storage does not match the "private media" setting.
+				$sql = $wpdb->prepare(
+					"SELECT DISTINCT source_id FROM {$items} WHERE source_type = %s AND path LIKE %s AND is_private = %d AND source_id > %d ORDER BY source_id ASC LIMIT %d",
+					Items::SOURCE_POST,
+					$wpdb->esc_like( 'bb_' ) . '%',
+					$this->attachments->buddyboss_private() ? 0 : 1,
+					$cursor,
+					$limit
+				);
+				break;
+
 			default:
 				return array();
 		}
@@ -231,6 +246,15 @@ final class Bulk {
 
 			case 'unoffload':
 				$sql = $wpdb->prepare( "SELECT COUNT(DISTINCT source_id) FROM {$items} WHERE source_type = %s", Items::SOURCE_POST );
+				break;
+
+			case 'sync_privacy':
+				$sql = $wpdb->prepare(
+					"SELECT COUNT(DISTINCT source_id) FROM {$items} WHERE source_type = %s AND path LIKE %s AND is_private = %d",
+					Items::SOURCE_POST,
+					$wpdb->esc_like( 'bb_' ) . '%',
+					$this->attachments->buddyboss_private() ? 0 : 1
+				);
 				break;
 
 			default:

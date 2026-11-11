@@ -23,10 +23,11 @@ defined( 'ABSPATH' ) || exit;
  *  - is_private    1 = served with pre-signed URLs only.
  *  - local_removed 1 = the local copy has been deleted.
  *  - filesize      Size in bytes at upload time.
+ *  - local_mtime   Modification time of the local file at upload time.
  */
 final class Items {
 
-	const DB_VERSION  = '1';
+	const DB_VERSION  = '2';
 	const CACHE_GROUP = 'bms3o_items';
 	const SOURCE_POST = 'attachment';
 	const NOT_FOUND   = 0;
@@ -65,13 +66,14 @@ final class Items {
   id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   source_type varchar(32) NOT NULL DEFAULT '',
   source_id bigint(20) unsigned NOT NULL DEFAULT 0,
-  path varchar(255) NOT NULL DEFAULT '',
+  path varchar(1024) NOT NULL DEFAULT '',
   path_hash char(32) NOT NULL DEFAULT '',
   bucket varchar(63) NOT NULL DEFAULT '',
   object_key varchar(1024) NOT NULL DEFAULT '',
   is_private tinyint(1) unsigned NOT NULL DEFAULT 0,
   local_removed tinyint(1) unsigned NOT NULL DEFAULT 0,
   filesize bigint(20) unsigned NOT NULL DEFAULT 0,
+  local_mtime int(10) unsigned NOT NULL DEFAULT 0,
   created_at datetime DEFAULT NULL,
   PRIMARY KEY  (id),
   UNIQUE KEY path_hash (path_hash),
@@ -301,16 +303,17 @@ final class Items {
 			'is_private'    => empty( $item['is_private'] ) ? 0 : 1,
 			'local_removed' => empty( $item['local_removed'] ) ? 0 : 1,
 			'filesize'      => isset( $item['filesize'] ) ? (int) $item['filesize'] : 0,
+			'local_mtime'   => isset( $item['local_mtime'] ) ? (int) $item['local_mtime'] : 0,
 			'created_at'    => current_time( 'mysql', true ),
 		);
 
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery -- Table name only.
 		$wpdb->query(
 			$wpdb->prepare(
-				"INSERT INTO {$table} (source_type, source_id, path, path_hash, bucket, object_key, is_private, local_removed, filesize, created_at)
-				VALUES (%s, %d, %s, %s, %s, %s, %d, %d, %d, %s)
+				"INSERT INTO {$table} (source_type, source_id, path, path_hash, bucket, object_key, is_private, local_removed, filesize, local_mtime, created_at)
+				VALUES (%s, %d, %s, %s, %s, %s, %d, %d, %d, %d, %s)
 				ON DUPLICATE KEY UPDATE source_type = VALUES(source_type), source_id = VALUES(source_id), bucket = VALUES(bucket),
-					object_key = VALUES(object_key), is_private = VALUES(is_private), local_removed = VALUES(local_removed), filesize = VALUES(filesize)",
+					object_key = VALUES(object_key), is_private = VALUES(is_private), local_removed = VALUES(local_removed), filesize = VALUES(filesize), local_mtime = VALUES(local_mtime)",
 				$row['source_type'],
 				$row['source_id'],
 				$row['path'],
@@ -320,6 +323,7 @@ final class Items {
 				$row['is_private'],
 				$row['local_removed'],
 				$row['filesize'],
+				$row['local_mtime'],
 				$row['created_at']
 			)
 		);
@@ -436,6 +440,7 @@ final class Items {
 		$row['is_private']    = (bool) $row['is_private'];
 		$row['local_removed'] = (bool) $row['local_removed'];
 		$row['filesize']      = (int) $row['filesize'];
+		$row['local_mtime']   = isset( $row['local_mtime'] ) ? (int) $row['local_mtime'] : 0;
 		unset( $row['path_hash'] );
 		return $row;
 	}

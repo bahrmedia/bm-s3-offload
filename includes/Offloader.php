@@ -172,7 +172,8 @@ final class Offloader {
 	 * @return string
 	 */
 	private function site_dir() {
-		if ( ! is_multisite() || is_main_site() ) {
+		// Same condition as WordPress' own uploads layout (wp_upload_dir()).
+		if ( ! is_multisite() || ( is_main_network() && is_main_site() ) ) {
 			return '';
 		}
 		return 'sites/' . get_current_blog_id() . '/';
@@ -229,8 +230,9 @@ final class Offloader {
 				continue;
 			}
 
-			$size = (int) filesize( $file );
-			$key  = $this->object_key( $path, $is_private );
+			$size  = (int) filesize( $file );
+			$mtime = (int) filemtime( $file );
+			$key   = $this->object_key( $path, $is_private );
 			$item = isset( $existing[ $path ] ) ? $existing[ $path ] : null;
 
 			// Never let two sources share one object.
@@ -239,7 +241,7 @@ final class Offloader {
 				continue;
 			}
 
-			if ( ! $force && $item && $item['bucket'] === $bucket && $item['object_key'] === $key && $item['filesize'] === $size ) {
+			if ( ! $force && $item && $item['bucket'] === $bucket && $item['object_key'] === $key && $item['filesize'] === $size && ( 0 === $item['local_mtime'] || $item['local_mtime'] === $mtime ) ) {
 				$result['skipped'][] = $path;
 				continue;
 			}
@@ -270,6 +272,7 @@ final class Offloader {
 					'is_private'    => $is_private,
 					'local_removed' => false,
 					'filesize'      => $size,
+					'local_mtime'   => $mtime,
 				)
 			);
 			$result['uploaded'][] = $path;
@@ -399,7 +402,8 @@ final class Offloader {
 				continue;
 			}
 
-			if ( (int) filesize( $file ) !== $item['filesize'] ) {
+			clearstatcache( true, $file );
+			if ( (int) filesize( $file ) !== $item['filesize'] || ( $item['local_mtime'] && (int) filemtime( $file ) !== $item['local_mtime'] ) ) {
 				continue; // Changed after upload: keep it, it will be offloaded again.
 			}
 
@@ -455,6 +459,11 @@ final class Offloader {
 				$result['errors'][ $path ] = $e->getMessage();
 				continue;
 			}
+
+			// The restored file is identical to the object: remember its new timestamp.
+			$item['local_mtime']   = (int) filemtime( $file );
+			$item['local_removed'] = false;
+			$this->items->save( $item );
 
 			$done[]                 = $path;
 			$result['downloaded'][] = $path;
@@ -564,6 +573,7 @@ final class Offloader {
 			}
 			$client->put_file( $item['object_key'], $file, $this->upload_headers( $item['path'], $item['is_private'] ) );
 			$item['filesize']      = (int) filesize( $file );
+			$item['local_mtime']   = (int) filemtime( $file );
 			$item['local_removed'] = false;
 			$this->items->save( $item );
 			return 'fixed';
@@ -724,7 +734,7 @@ final class Offloader {
 			$query['response-content-disposition'] = $args['disposition'] . '; filename="' . str_replace( '"', '', wp_basename( $item['path'] ) ) . '"';
 		}
 
-		$cache_key = $item['object_key'] . '|' . $ttl . '|' . $time . '|' . implode( '|', $query );
+		$cache_key = $this->bucket_of( $item ) . '|' . $item['object_key'] . '|' . $ttl . '|' . $time . '|' . implode( '|', $query );
 		if ( ! isset( $this->signed_cache[ $cache_key ] ) ) {
 			$url = $this->settings->client( $this->bucket_of( $item ) )->presign( $item['object_key'], $ttl, $query, $time );
 

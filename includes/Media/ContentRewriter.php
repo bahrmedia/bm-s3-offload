@@ -8,6 +8,7 @@
 namespace BahrMedia\S3Offload\Media;
 
 use BahrMedia\S3Offload\Offloader;
+use BahrMedia\S3Offload\S3\Client;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -111,7 +112,7 @@ final class ContentRewriter {
 			$prefix = $this->offloader->key_prefix( $is_private );
 			$domain = (string) $this->offloader->settings()->get( 'delivery_domain' );
 			if ( '' !== $domain ) {
-				$bases[] = preg_replace( '#^https?:#i', '', $domain ) . '/' . \BahrMedia\S3Offload\S3\Client::encode_key( $prefix );
+				$bases[] = preg_replace( '#^https?:#i', '', $domain ) . '/' . Client::encode_key( $prefix );
 			}
 			try {
 				$bases[] = preg_replace( '#^https?:#i', '', $this->offloader->settings()->client()->object_url( $prefix ) );
@@ -136,12 +137,25 @@ final class ContentRewriter {
 		foreach ( $bases as $base ) {
 			$quoted[] = preg_quote( $base, '#' );
 		}
-		$local = $this->offloader->uploads()['baseurl'] . '/';
+		$local   = $this->offloader->uploads()['baseurl'] . '/';
+		$pattern = '#(?:https?:)?(?:' . implode( '|', $quoted ) . ')([^\s"\'<>()\\\\?\#,]+)(?:\?[^\s"\'<>]*)?#i';
+		if ( ! preg_match_all( $pattern, $content, $matches ) ) {
+			return $content;
+		}
+
+		// Only URLs of files we know are replaced, and the replacement is built from
+		// the stored path (never from the decoded input: content is already sanitised).
+		$paths = array();
+		foreach ( $matches[1] as $encoded ) {
+			$paths[ $encoded ] = rawurldecode( $encoded );
+		}
+		$items = $this->offloader->items()->get_many( array_values( $paths ) );
 
 		return (string) preg_replace_callback(
-			'#(?:https?:)?(?:' . implode( '|', $quoted ) . ')([^\s"\'<>()\\\\?\#,]+)(?:\?[^\s"\'<>]*)?#i',
-			static function ( $found ) use ( $local ) {
-				return $local . rawurldecode( $found[1] );
+			$pattern,
+			static function ( $found ) use ( $local, $paths, $items ) {
+				$path = $paths[ $found[1] ];
+				return isset( $items[ $path ] ) ? $local . Client::encode_key( $items[ $path ]['path'] ) : $found[0];
 			},
 			$content
 		);

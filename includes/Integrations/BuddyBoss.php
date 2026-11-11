@@ -56,6 +56,13 @@ final class BuddyBoss {
 	private $sync_queue = array();
 
 	/**
+	 * Request cache of BuddyBoss access checks.
+	 *
+	 * @var array<string,bool>
+	 */
+	private $access_cache = array();
+
+	/**
 	 * Recursion guard for cover lookups.
 	 *
 	 * @var bool
@@ -115,7 +122,7 @@ final class BuddyBoss {
 
 		// Tell BuddyBoss that media is offloaded.
 		add_filter( 'bb_media_offload_delivered', array( $this, 'filter_offload_delivered' ) );
-		add_filter( 'bb_media_check_default_access', array( $this, 'filter_offload_delivered' ) );
+		add_filter( 'bb_media_check_default_access', array( $this, 'filter_skip_access_check' ) );
 		add_filter( 'bb_media_offload_delivery_provider', array( $this, 'filter_delivery_provider' ) );
 		add_filter( 'bp_core_get_js_strings', array( $this, 'filter_js_strings' ) );
 
@@ -246,24 +253,48 @@ final class BuddyBoss {
 			return $url;
 		}
 
-		if ( 'proxy' === $this->offloader->settings()->get( 'bb_delivery' ) ) {
-			// Same format as BuddyBoss' own preview endpoint; answered by redirect_media_preview().
-			$media_segment      = 'forbidden_' . (int) $media_id;
-			$attachment_segment = 'forbidden_' . (int) $attachment_id;
-			// phpcs:disable WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- BuddyBoss URL format.
-			$url = home_url( '/' ) . 'bb-media-preview/' . base64_encode( $attachment_segment ) . '/' . base64_encode( $media_segment ) . '/' . rawurlencode( (string) $size );
-			// phpcs:enable
+		$receiver_id = (int) self::caller_argument( 'bp_media_get_preview_image_url', 4 );
 
-			// E-mails pass a receiver: add BuddyBoss' signed receiver segment, as BuddyBoss does.
-			$receiver_id = (int) self::caller_argument( 'bp_media_get_preview_image_url', 4 );
-			if ( $receiver_id > 0 && function_exists( 'bb_media_preview_receiver_segment' ) ) {
-				$url .= '/' . bb_media_preview_receiver_segment( $receiver_id, $media_segment, $attachment_segment );
-			}
-
-			return untrailingslashit( $url );
+		// Direct mode: signed URL only after BuddyBoss' access check for the current
+		// user – not every BuddyBoss listing is filtered by privacy (e.g. REST "include").
+		// E-mails (receiver) and everyone else get the access-checked preview URL.
+		if ( 'direct' === $this->offloader->settings()->get( 'bb_delivery' ) && 0 === $receiver_id && $this->can_view( 'photo', (int) $media_id, (int) $attachment_id ) ) {
+			return $this->size_url( (int) $attachment_id, (string) $size );
 		}
 
-		return $this->size_url( (int) $attachment_id, (string) $size );
+		// Same format as BuddyBoss' own preview endpoint; answered by redirect_media_preview().
+		$media_segment      = 'forbidden_' . (int) $media_id;
+		$attachment_segment = 'forbidden_' . (int) $attachment_id;
+		// phpcs:disable WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- BuddyBoss URL format.
+		$url = home_url( '/' ) . 'bb-media-preview/' . base64_encode( $attachment_segment ) . '/' . base64_encode( $media_segment ) . '/' . rawurlencode( (string) $size );
+		// phpcs:enable
+
+		// E-mails pass a receiver: add BuddyBoss' signed receiver segment, as BuddyBoss does.
+		if ( $receiver_id > 0 && function_exists( 'bb_media_preview_receiver_segment' ) ) {
+			$url .= '/' . bb_media_preview_receiver_segment( $receiver_id, $media_segment, $attachment_segment );
+		}
+
+		return untrailingslashit( $url );
+	}
+
+	/**
+	 * Whether the current user may view a BuddyBoss item (BuddyBoss' own check, cached per request).
+	 *
+	 * @param string $type          'photo', 'document' or 'video'.
+	 * @param int    $id            Media/document/video ID.
+	 * @param int    $attachment_id Attachment ID.
+	 * @return bool
+	 */
+	private function can_view( $type, $id, $attachment_id ) {
+		if ( ! function_exists( 'bb_media_user_can_access' ) || ! $id ) {
+			return false;
+		}
+		$key = $type . ':' . $id . ':' . $attachment_id . ':' . get_current_user_id();
+		if ( ! isset( $this->access_cache[ $key ] ) ) {
+			$access                     = bb_media_user_can_access( $id, $type, $attachment_id );
+			$this->access_cache[ $key ] = ! empty( $access['can_view'] );
+		}
+		return $this->access_cache[ $key ];
 	}
 
 	/**
@@ -277,7 +308,7 @@ final class BuddyBoss {
 	 * @return string
 	 */
 	public function filter_document_preview_url( $url, $document_id, $extension, $size, $attachment_id ) {
-		if ( ! $this->delivers( (int) $attachment_id ) ) {
+		if ( ! $this->delivers( (int) $attachment_id ) || ! $this->can_view( 'document', (int) $document_id, (int) $attachment_id ) ) {
 			return $url;
 		}
 
@@ -310,7 +341,7 @@ final class BuddyBoss {
 	 * @return string
 	 */
 	public function filter_video_thumb_url( $url, $video_id, $size, $attachment_id ) {
-		return $this->delivers( (int) $attachment_id ) ? $this->size_url( (int) $attachment_id, (string) $size ) : $url;
+		return $this->delivers( (int) $attachment_id ) && $this->can_view( 'video', (int) $video_id, 0 ) ? $this->size_url( (int) $attachment_id, (string) $size ) : $url;
 	}
 
 	/**
@@ -322,7 +353,7 @@ final class BuddyBoss {
 	 * @return string
 	 */
 	public function filter_video_url( $url, $video_id, $attachment_id ) {
-		return $this->delivers( (int) $attachment_id ) ? $this->file_url( (int) $attachment_id ) : $url;
+		return $this->delivers( (int) $attachment_id ) && $this->can_view( 'video', (int) $video_id, (int) $attachment_id ) ? $this->file_url( (int) $attachment_id ) : $url;
 	}
 
 	/**
@@ -470,6 +501,17 @@ final class BuddyBoss {
 	 */
 	public function filter_offload_delivered( $value ) {
 		return $this->offloader->settings()->is_configured() ? true : $value;
+	}
+
+	/**
+	 * BuddyBoss checks whether its media folders are directly reachable. Skip
+	 * that check only when no local copies exist that could be reachable.
+	 *
+	 * @param bool $value Current value.
+	 * @return bool
+	 */
+	public function filter_skip_access_check( $value ) {
+		return $this->offloader->settings()->is_configured() && $this->offloader->settings()->get( 'remove_local' ) ? true : $value;
 	}
 
 	/**
