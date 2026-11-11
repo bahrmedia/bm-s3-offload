@@ -1,0 +1,63 @@
+/* BM S3 Offload – admin screen */
+
+.bms3o .bms3o-locked {
+	color: #996800;
+}
+
+.bms3o .bms3o-stats {
+	max-width: 32em;
+}
+
+.bms3o .bms3o-stats th {
+	font-weight: 600;
+	width: 60%;
+}
+
+.bms3o .bms3o-test-result li.is-ok {
+	color: #007017;
+}
+
+.bms3o .bms3o-test-result li.is-error {
+	color: #b32d2e;
+}
+
+.bms3o .bms3o-bulk-grid {
+	display: grid;
+	gap: 16px;
+	grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+	max-width: 1200px;
+}
+
+.bms3o .bms3o-card {
+	background: #fff;
+	border: 1px solid #c3c4c7;
+	border-radius: 4px;
+	padding: 4px 16px 8px;
+}
+
+.bms3o .bms3o-card h3 {
+	margin: 12px 0 4px;
+}
+
+.bms3o .bms3o-card.bms3o-danger {
+	border-color: #d63638;
+}
+
+.bms3o .bms3o-progress {
+	width: 100%;
+}
+
+.bms3o .bms3o-errors {
+	color: #b32d2e;
+	max-height: 12em;
+	overflow: auto;
+	word-break: break-word;
+}
+
+.bms3o .bms3o-policy {
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	max-width: 760px;
+	overflow: auto;
+	padding: 12px;
+}
