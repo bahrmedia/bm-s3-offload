@@ -256,6 +256,32 @@ final class Items {
 	}
 
 	/**
+	 * Items ordered by ID, for iterating over the whole table.
+	 *
+	 * @param int $after_id Return items with a larger ID.
+	 * @param int $limit    Maximum number of items.
+	 * @return array[] Rows.
+	 */
+	public function page( $after_id, $limit ) {
+		global $wpdb;
+		$table = self::table();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery
+		$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE id > %d ORDER BY id ASC LIMIT %d", $after_id, $limit ), ARRAY_A );
+		return array_map( array( __CLASS__, 'normalize' ), (array) $rows );
+	}
+
+	/**
+	 * Number of items.
+	 *
+	 * @return int
+	 */
+	public function count() {
+		global $wpdb;
+		$table = self::table();
+		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery
+	}
+
+	/**
 	 * Inserts or updates an item (identified by its path).
 	 *
 	 * @param array $item Item data.

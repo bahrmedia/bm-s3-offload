@@ -137,6 +137,10 @@ final class Bulk {
 
 			case 'unoffload':
 				return self::first_error( $this->attachments->unoffload( $attachment_id ) );
+
+			case 'make_private':
+			case 'make_public':
+				return self::first_error( $this->attachments->set_privacy( $attachment_id, 'make_private' === $operation ) );
 		}
 		return '';
 	}

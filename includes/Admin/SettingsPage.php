@@ -48,6 +48,7 @@ final class SettingsPage {
 		add_action( 'admin_post_bms3o_save', array( $this, 'handle_save' ) );
 		add_action( 'wp_ajax_bms3o_test', array( $this, 'ajax_test' ) );
 		add_action( 'wp_ajax_bms3o_bulk', array( $this, 'ajax_bulk' ) );
+		add_action( 'wp_ajax_bms3o_background', array( $this, 'ajax_background' ) );
 		add_action( 'admin_notices', array( $this, 'notices' ) );
 		add_filter( 'plugin_action_links_' . plugin_basename( BMS3O_FILE ), array( $this, 'action_links' ) );
 	}
@@ -127,6 +128,9 @@ final class SettingsPage {
 					'processed' => __( 'Processed', 'bm-s3-offload' ),
 					'errors'    => __( 'Errors', 'bm-s3-offload' ),
 					'confirm'   => __( 'This moves all files back to this server and deletes them from the bucket. Continue?', 'bm-s3-offload' ),
+					'bgRunning' => __( 'Running in the background', 'bm-s3-offload' ),
+					'bgDone'    => __( 'Background operation finished', 'bm-s3-offload' ),
+					'bgStopped' => __( 'Background operation stopped', 'bm-s3-offload' ),
 				),
 			)
 		);
@@ -249,6 +253,15 @@ final class SettingsPage {
 						'description' => __( 'Optional. Must point to the bucket root (the object key is appended). Signed URLs always use the endpoint.', 'bm-s3-offload' ),
 					)
 				);
+				$this->field(
+					'assets_domain',
+					__( 'CDN for CSS and JavaScript', 'bm-s3-offload' ),
+					'url',
+					array(
+						'placeholder' => 'https://static.example.com',
+						'description' => __( 'Optional. A pull CDN whose origin is this website. Scripts and styles of themes, plugins and WordPress are then loaded from it (front end only).', 'bm-s3-offload' ),
+					)
+				);
 				$this->field( 'sign_all', __( 'Signed URLs for all files', 'bm-s3-offload' ), 'checkbox', array( 'label' => __( 'Use a completely private bucket and deliver every file with a pre-signed URL.', 'bm-s3-offload' ) ) );
 				$this->field(
 					'signed_ttl',
@@ -284,6 +297,13 @@ final class SettingsPage {
 					)
 				);
 				$this->field( 'bb_avatars', __( 'Avatars and cover images', 'bm-s3-offload' ), 'checkbox', array( 'label' => __( 'Mirror member and group avatars and cover images to the bucket and serve them from there (local copies are kept).', 'bm-s3-offload' ) ) );
+				?>
+			</table>
+
+			<h2><?php esc_html_e( 'Integrations', 'bm-s3-offload' ); ?></h2>
+			<table class="form-table" role="presentation">
+				<?php
+				$this->field( 'wc_enabled', __( 'WooCommerce', 'bm-s3-offload' ), 'checkbox', array( 'label' => __( 'Deliver downloadable products from the bucket: after WooCommerce has checked the order, customers are redirected to a short-lived signed URL.', 'bm-s3-offload' ) ) );
 				?>
 			</table>
 
@@ -426,7 +446,13 @@ final class SettingsPage {
 		<ul id="bms3o-test-result" class="bms3o-test-result"></ul>
 
 		<h2><?php esc_html_e( 'Bulk operations', 'bm-s3-offload' ); ?></h2>
-		<p><?php esc_html_e( 'Operations run in small batches in your browser. Keep this page open; you can stop and resume at any time. For very large libraries, use WP-CLI: wp bm-s3', 'bm-s3-offload' ); ?></p>
+		<p><?php esc_html_e( 'Run an operation in this browser window (keep the page open) or in the background (WP-Cron; you can close the page). For very large libraries, WP-CLI is fastest: wp bm-s3', 'bm-s3-offload' ); ?></p>
+		<div id="bms3o-background" class="bms3o-background notice inline" hidden>
+			<p><strong class="bms3o-bg-title"></strong> <span class="bms3o-bg-status"></span></p>
+			<progress class="bms3o-progress" max="100" value="0"></progress>
+			<p><button type="button" class="button bms3o-bg-stop"><?php esc_html_e( 'Stop', 'bm-s3-offload' ); ?></button></p>
+			<ul class="bms3o-errors"></ul>
+		</div>
 		<div class="bms3o-bulk-grid">
 			<?php
 			$this->bulk_card( 'offload', __( 'Offload existing media', 'bm-s3-offload' ), __( 'Uploads all media that are not in the bucket yet.', 'bm-s3-offload' ), true );
@@ -474,7 +500,10 @@ final class SettingsPage {
 			<?php endif; ?>
 			<progress class="bms3o-progress" max="100" value="0" hidden></progress>
 			<p class="bms3o-status" aria-live="polite"></p>
-			<p><button type="button" class="button <?php echo $danger ? 'button-link-delete' : 'button-primary'; ?> bms3o-start" <?php disabled( ! $configured || 0 === $remaining ); ?>><?php esc_html_e( 'Start', 'bm-s3-offload' ); ?></button></p>
+			<p>
+				<button type="button" class="button <?php echo $danger ? 'button-link-delete' : 'button-primary'; ?> bms3o-start" <?php disabled( ! $configured || 0 === $remaining ); ?>><?php esc_html_e( 'Start', 'bm-s3-offload' ); ?></button>
+				<button type="button" class="button bms3o-start-background" <?php disabled( ! $configured || 0 === $remaining ); ?>><?php esc_html_e( 'Run in background', 'bm-s3-offload' ); ?></button>
+			</p>
 			<ul class="bms3o-errors"></ul>
 		</div>
 		<?php
@@ -557,6 +586,58 @@ final class SettingsPage {
 		$size = (int) apply_filters( 'bms3o_bulk_batch_size', 'bb_sync' === $operation ? 20 : 10, $operation );
 
 		wp_send_json_success( $this->plugin->bulk->run( $operation, $cursor, $size, $options ) );
+	}
+
+	/**
+	 * Background operations: start, stop, status.
+	 *
+	 * @return void
+	 */
+	public function ajax_background() {
+		$this->verify_ajax();
+
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- Verified in verify_ajax().
+		$command   = isset( $_POST['command'] ) ? sanitize_key( wp_unslash( $_POST['command'] ) ) : 'status';
+		$operation = isset( $_POST['operation'] ) ? sanitize_key( wp_unslash( $_POST['operation'] ) ) : '';
+		$options   = array( 'remove_local' => ! empty( $_POST['remove_local'] ) );
+		// phpcs:enable
+
+		$background = $this->plugin->background;
+		if ( 'start' === $command ) {
+			if ( ! in_array( $operation, Bulk::OPERATIONS, true ) || ! $this->plugin->settings->is_configured() ) {
+				wp_send_json_error( array( 'message' => __( 'Invalid request.', 'bm-s3-offload' ) ), 400 );
+			}
+			if ( ! $background->start( $operation, $options ) ) {
+				wp_send_json_error( array( 'message' => __( 'Another background operation is running.', 'bm-s3-offload' ) ), 409 );
+			}
+		} elseif ( 'stop' === $command ) {
+			$background->stop();
+		} else {
+			$background->nudge();
+		}
+
+		$state = $background->state();
+		if ( $state ) {
+			$state['label'] = $this->operation_label( $state['operation'] );
+		}
+		wp_send_json_success( array( 'state' => $state ) );
+	}
+
+	/**
+	 * Human readable name of a bulk operation.
+	 *
+	 * @param string $operation Operation.
+	 * @return string
+	 */
+	private function operation_label( $operation ) {
+		$labels = array(
+			'offload'      => __( 'Offload existing media', 'bm-s3-offload' ),
+			'remove_local' => __( 'Remove local copies', 'bm-s3-offload' ),
+			'download'     => __( 'Restore local copies', 'bm-s3-offload' ),
+			'bb_sync'      => __( 'BuddyBoss avatars and covers', 'bm-s3-offload' ),
+			'unoffload'    => __( 'Leave the bucket', 'bm-s3-offload' ),
+		);
+		return isset( $labels[ $operation ] ) ? $labels[ $operation ] : $operation;
 	}
 
 	/*

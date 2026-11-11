@@ -74,11 +74,14 @@ final class Settings {
 			'delivery_domain' => '',
 			'sign_all'        => false,
 			'signed_ttl'      => 3600,
+			'assets_domain'   => '',
 			// BuddyBoss.
 			'bb_enabled'      => true,
 			'bb_private'      => true,
 			'bb_delivery'     => 'proxy',
 			'bb_avatars'      => true,
+			// Integrations.
+			'wc_enabled'      => true,
 			// Misc.
 			'remove_data'     => false,
 		);
@@ -332,6 +335,7 @@ final class Settings {
 		switch ( $key ) {
 			case 'endpoint':
 			case 'delivery_domain':
+			case 'assets_domain':
 				return untrailingslashit( esc_url_raw( $value, array( 'http', 'https' ) ) );
 
 			case 'bucket':

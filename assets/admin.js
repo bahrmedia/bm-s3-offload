@@ -193,4 +193,74 @@
 			step( 0 );
 		} );
 	} );
+	/*
+	 * Background operations.
+	 */
+	var panel = document.getElementById( 'bms3o-background' );
+	if ( panel ) {
+		var bgTitle = panel.querySelector( '.bms3o-bg-title' );
+		var bgStatus = panel.querySelector( '.bms3o-bg-status' );
+		var bgProgress = panel.querySelector( '.bms3o-progress' );
+		var bgErrors = panel.querySelector( '.bms3o-errors' );
+		var bgStop = panel.querySelector( '.bms3o-bg-stop' );
+		var pollTimer = null;
+
+		var render = function ( state ) {
+			if ( ! state ) {
+				panel.hidden = true;
+				return;
+			}
+			var running = 'running' === state.status;
+			var labels = { running: config.i18n.bgRunning, done: config.i18n.bgDone, stopped: config.i18n.bgStopped };
+			panel.hidden = false;
+			panel.className = 'bms3o-background notice inline ' + ( running ? 'notice-info' : ( 'done' === state.status ? 'notice-success' : 'notice-warning' ) );
+			bgTitle.textContent = ( labels[ state.status ] || state.status ) + ': ' + state.label;
+			bgStatus.textContent = config.i18n.processed + ': ' + state.processed + ' / ' + state.total;
+			bgProgress.value = state.total ? Math.min( 100, Math.round( state.processed / state.total * 100 ) ) : ( running ? 0 : 100 );
+			bgStop.hidden = ! running;
+			bgErrors.textContent = '';
+			Object.keys( state.errors || {} ).forEach( function ( id ) {
+				var li = document.createElement( 'li' );
+				li.textContent = '#' + id + ': ' + state.errors[ id ];
+				bgErrors.appendChild( li );
+			} );
+
+			window.clearTimeout( pollTimer );
+			if ( running ) {
+				pollTimer = window.setTimeout( poll, 5000 );
+			}
+		};
+
+		var poll = function ( command, extra ) {
+			var data = { action: 'bms3o_background', command: command || 'status' };
+			Object.keys( extra || {} ).forEach( function ( key ) {
+				data[ key ] = extra[ key ];
+			} );
+			return post( data ).then( function ( result ) {
+				render( result.state );
+			} ).catch( function ( error ) {
+				window.alert( config.i18n.failed + ' ' + error.message );
+			} );
+		};
+
+		bgStop.addEventListener( 'click', function () {
+			poll( 'stop' );
+		} );
+
+		Array.prototype.forEach.call( document.querySelectorAll( '.bms3o-start-background' ), function ( button ) {
+			button.addEventListener( 'click', function () {
+				var card = button.closest( '.bms3o-card' );
+				if ( card.getAttribute( 'data-danger' ) === '1' && ! window.confirm( config.i18n.confirm ) ) {
+					return;
+				}
+				var removeLocal = card.querySelector( '.bms3o-remove-local' );
+				poll( 'start', {
+					operation: card.getAttribute( 'data-operation' ),
+					remove_local: removeLocal && removeLocal.checked ? 1 : 0
+				} );
+			} );
+		} );
+
+		poll( 'status' );
+	}
 }() );

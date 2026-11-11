@@ -251,6 +251,33 @@ class Client {
 	}
 
 	/**
+	 * Copies an object within the bucket (server side, no download/upload).
+	 *
+	 * Objects larger than 5 GiB would need a multipart copy; media files of
+	 * that size are not supported by WordPress anyway.
+	 *
+	 * @param string $source_key Source key.
+	 * @param string $target_key Target key.
+	 * @param array  $headers    Headers of the new object. When given, they replace the
+	 *                           metadata (Content-Type, Cache-Control, x-amz-acl …).
+	 * @return void
+	 * @throws S3Exception On failure.
+	 */
+	public function copy( $source_key, $target_key, array $headers = array() ) {
+		$directive                           = empty( $headers ) ? 'COPY' : 'REPLACE';
+		$headers['x-amz-copy-source']        = '/' . rawurlencode( $this->bucket ) . '/' . self::encode_key( ltrim( (string) $source_key, '/' ) );
+		$headers['x-amz-metadata-directive'] = $directive;
+
+		$response = $this->request( 'PUT', $target_key, array(), $headers );
+
+		// S3 may answer 200 OK with an error document for this operation.
+		$doc = self::parse_xml( $response['body'] );
+		if ( $doc && 'Error' === $doc->getName() ) {
+			throw new S3Exception( self::text( $doc, 'Message' ), 500, self::text( $doc, 'Code' ) );
+		}
+	}
+
+	/**
 	 * Deletes an object. Deleting a missing object is not an error.
 	 *
 	 * @param string $key Object key.

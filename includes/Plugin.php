@@ -10,6 +10,7 @@ namespace BahrMedia\S3Offload;
 use BahrMedia\S3Offload\Admin\MediaLibrary;
 use BahrMedia\S3Offload\Admin\SettingsPage;
 use BahrMedia\S3Offload\Integrations\BuddyBoss;
+use BahrMedia\S3Offload\Integrations\WooCommerce;
 use BahrMedia\S3Offload\Media\Attachments;
 use BahrMedia\S3Offload\Media\ContentRewriter;
 use BahrMedia\S3Offload\Store\Items;
@@ -66,6 +67,13 @@ final class Plugin {
 	public $bulk;
 
 	/**
+	 * Background runner for bulk operations.
+	 *
+	 * @var Background
+	 */
+	public $background;
+
+	/**
 	 * Returns (and on first call boots) the plugin.
 	 *
 	 * @return Plugin
@@ -92,13 +100,20 @@ final class Plugin {
 		$this->attachments = new Attachments( $this->offloader );
 		$this->attachments->register();
 		( new ContentRewriter( $this->offloader ) )->register();
+		( new Assets( $this->settings ) )->register();
 
 		if ( BuddyBoss::is_active() ) {
 			$this->buddyboss = new BuddyBoss( $this->offloader, $this->attachments );
 			$this->buddyboss->register();
 		}
 
-		$this->bulk = new Bulk( $this->attachments, $this->buddyboss );
+		if ( WooCommerce::is_active() ) {
+			( new WooCommerce( $this->offloader ) )->register();
+		}
+
+		$this->bulk       = new Bulk( $this->attachments, $this->buddyboss );
+		$this->background = new Background( $this->bulk, $this->offloader );
+		$this->background->register();
 
 		if ( is_admin() ) {
 			( new SettingsPage( $this ) )->register();
@@ -150,5 +165,6 @@ final class Plugin {
 	 */
 	public static function deactivate() {
 		wp_clear_scheduled_hook( self::CRON_HOOK );
+		wp_clear_scheduled_hook( Background::HOOK );
 	}
 }

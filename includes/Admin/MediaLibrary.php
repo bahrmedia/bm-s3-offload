@@ -47,6 +47,8 @@ final class MediaLibrary {
 		add_action( 'attachment_submitbox_misc_actions', array( $this, 'submitbox' ), 20 );
 		add_action( 'admin_notices', array( $this, 'notice' ) );
 		add_action( 'admin_head-upload.php', array( $this, 'column_style' ) );
+		add_action( 'restrict_manage_posts', array( $this, 'status_filter' ) );
+		add_filter( 'posts_where', array( $this, 'filter_where' ), 10, 2 );
 	}
 
 	/**
@@ -60,7 +62,81 @@ final class MediaLibrary {
 			'remove_local' => __( 'Remove local copy', 'bm-s3-offload' ),
 			'download'     => __( 'Restore local copy', 'bm-s3-offload' ),
 			'unoffload'    => __( 'Remove from bucket', 'bm-s3-offload' ),
+			'make_private' => __( 'Make private (signed URLs)', 'bm-s3-offload' ),
+			'make_public'  => __( 'Make public', 'bm-s3-offload' ),
 		);
+	}
+
+	/**
+	 * Filter options.
+	 *
+	 * @return array<string,string>
+	 */
+	private static function filters() {
+		return array(
+			'offloaded'   => __( 'In bucket', 'bm-s3-offload' ),
+			'local'       => __( 'Local only', 'bm-s3-offload' ),
+			'bucket_only' => __( 'In bucket only', 'bm-s3-offload' ),
+			'private'     => __( 'Private', 'bm-s3-offload' ),
+		);
+	}
+
+	/**
+	 * Selected filter ('' = none).
+	 *
+	 * @return string
+	 */
+	private static function current_filter() {
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- List table filter (read only).
+		$value = isset( $_GET['bms3o_status'] ) ? sanitize_key( wp_unslash( $_GET['bms3o_status'] ) ) : '';
+		return array_key_exists( $value, self::filters() ) ? $value : '';
+	}
+
+	/**
+	 * Status dropdown above the list table.
+	 *
+	 * @param string $post_type Post type.
+	 * @return void
+	 */
+	public function status_filter( $post_type ) {
+		if ( 'attachment' !== $post_type ) {
+			return;
+		}
+		$current = self::current_filter();
+		echo '<label for="bms3o-status-filter" class="screen-reader-text">' . esc_html__( 'Filter by storage', 'bm-s3-offload' ) . '</label>';
+		echo '<select name="bms3o_status" id="bms3o-status-filter"><option value="">' . esc_html__( 'All storage states', 'bm-s3-offload' ) . '</option>';
+		foreach ( self::filters() as $value => $label ) {
+			echo '<option value="' . esc_attr( $value ) . '"' . selected( $current, $value, false ) . '>' . esc_html( $label ) . '</option>';
+		}
+		echo '</select>';
+	}
+
+	/**
+	 * Applies the status filter to the media list query.
+	 *
+	 * @param string    $where WHERE clause.
+	 * @param \WP_Query $query Query.
+	 * @return string
+	 */
+	public function filter_where( $where, $query ) {
+		global $wpdb;
+
+		$filter = self::current_filter();
+		if ( '' === $filter || ! $query->is_main_query() || 'attachment' !== $query->get( 'post_type' ) ) {
+			return $where;
+		}
+
+		$items = \BahrMedia\S3Offload\Store\Items::table();
+		$base  = "SELECT 1 FROM {$items} bms3o WHERE bms3o.source_type = 'attachment' AND bms3o.source_id = {$wpdb->posts}.ID";
+
+		$conditions = array(
+			'offloaded'   => "EXISTS ( {$base} )",
+			'local'       => "NOT EXISTS ( {$base} )",
+			'bucket_only' => "EXISTS ( {$base} AND bms3o.local_removed = 1 )",
+			'private'     => "EXISTS ( {$base} AND bms3o.is_private = 1 )",
+		);
+
+		return $where . ' AND ' . $conditions[ $filter ];
 	}
 
 	/**
@@ -124,8 +200,10 @@ final class MediaLibrary {
 		}
 
 		$removed = 0;
+		$private = 0;
 		foreach ( $items as $item ) {
 			$removed += $item['local_removed'] ? 1 : 0;
+			$private += $item['is_private'] ? 1 : 0;
 		}
 
 		$actions = array( 'offload' );
@@ -134,6 +212,12 @@ final class MediaLibrary {
 		}
 		if ( $removed > 0 ) {
 			$actions[] = 'download';
+		}
+		if ( $private < count( $items ) ) {
+			$actions[] = 'make_private';
+		}
+		if ( $private > 0 && ! $this->plugin->attachments->is_protected_path( (string) get_post_meta( $attachment_id, '_wp_attached_file', true ) ) ) {
+			$actions[] = 'make_public';
 		}
 		$actions[] = 'unoffload';
 		return $actions;

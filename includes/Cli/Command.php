@@ -198,6 +198,140 @@ final class Command {
 	}
 
 	/**
+	 * Checks that every offloaded file exists in the bucket.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [--fix]
+	 * : Upload missing objects again from the local copy.
+	 *
+	 * @param array $args       Positional arguments.
+	 * @param array $assoc_args Named arguments.
+	 * @return void
+	 */
+	public function verify( $args, $assoc_args ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundBeforeLastUsed -- WP-CLI signature.
+		if ( ! $this->plugin->settings->is_configured() ) {
+			WP_CLI::error( 'The bucket is not configured.' );
+		}
+
+		$items    = $this->plugin->offloader->items();
+		$progress = \WP_CLI\Utils\make_progress_bar( 'Verifying', $items->count() );
+		$counts   = array(
+			'ok'      => 0,
+			'fixed'   => 0,
+			'missing' => 0,
+			'error'   => 0,
+		);
+		$after    = 0;
+
+		do {
+			$page = $items->page( $after, 200 );
+			foreach ( $page as $item ) {
+				$after  = $item['id'];
+				$result = $this->plugin->offloader->verify( $item, ! empty( $assoc_args['fix'] ) );
+				if ( isset( $counts[ $result ] ) ) {
+					++$counts[ $result ];
+				} else {
+					++$counts['error'];
+				}
+				if ( 'ok' !== $result ) {
+					WP_CLI::warning( sprintf( '%s: %s', $item['path'], $result ) );
+				}
+				$progress->tick();
+			}
+		} while ( count( $page ) === 200 );
+		$progress->finish();
+
+		$summary = sprintf( '%d ok, %d fixed, %d missing, %d errors.', $counts['ok'], $counts['fixed'], $counts['missing'], $counts['error'] );
+		if ( $counts['missing'] || $counts['error'] ) {
+			WP_CLI::error( $summary );
+		}
+		WP_CLI::success( $summary );
+	}
+
+	/**
+	 * Controls bulk operations running in the background (WP-Cron).
+	 *
+	 * ## OPTIONS
+	 *
+	 * <command>
+	 * : start, stop or status.
+	 *
+	 * [<operation>]
+	 * : For start: offload, remove_local, download, bb_sync or unoffload.
+	 *
+	 * [--remove-local]
+	 * : For start offload: remove local copies afterwards.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp bm-s3 background start offload --remove-local
+	 *     wp bm-s3 background status
+	 *
+	 * @param array $args       Positional arguments.
+	 * @param array $assoc_args Named arguments.
+	 * @return void
+	 */
+	public function background( $args, $assoc_args ) {
+		$background = $this->plugin->background;
+		$command    = $args[0];
+
+		if ( 'start' === $command ) {
+			$operation = isset( $args[1] ) ? $args[1] : '';
+			if ( ! $background->start( $operation, array( 'remove_local' => ! empty( $assoc_args['remove-local'] ) ) ) ) {
+				WP_CLI::error( 'Invalid operation or another background operation is running.' );
+			}
+			WP_CLI::success( sprintf( 'Started %s in the background.', $operation ) );
+			return;
+		}
+
+		if ( 'stop' === $command ) {
+			$background->stop();
+			WP_CLI::success( 'Stopped.' );
+			return;
+		}
+
+		$state = $background->state();
+		if ( ! $state ) {
+			WP_CLI::log( 'No background operation.' );
+			return;
+		}
+		WP_CLI::log( sprintf( '%s: %s, %d/%d processed, %d errors', $state['operation'], $state['status'], $state['processed'], $state['total'], count( $state['errors'] ) ) );
+		foreach ( $state['errors'] as $id => $message ) {
+			WP_CLI::warning( sprintf( '#%d: %s', $id, $message ) );
+		}
+	}
+
+	/**
+	 * Makes media private (expiring signed URLs) or public.
+	 *
+	 * ## OPTIONS
+	 *
+	 * <id>...
+	 * : Attachment IDs.
+	 *
+	 * [--private]
+	 * : Make private.
+	 *
+	 * [--public]
+	 * : Make public.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp bm-s3 privacy 123 456 --private
+	 *
+	 * @param array $args       Positional arguments.
+	 * @param array $assoc_args Named arguments.
+	 * @return void
+	 */
+	public function privacy( $args, $assoc_args ) {
+		if ( empty( $assoc_args['private'] ) === empty( $assoc_args['public'] ) ) {
+			WP_CLI::error( 'Pass either --private or --public.' );
+		}
+		$this->execute( empty( $assoc_args['private'] ) ? 'make_public' : 'make_private', $args, array() );
+	}
+
+	/**
 	 * Mirrors all BuddyBoss avatars and cover images to the bucket.
 	 *
 	 * @subcommand bb-sync

@@ -24,6 +24,7 @@ function bms3o_uninstall_site() {
 	}
 
 	wp_clear_scheduled_hook( 'bms3o_cron' );
+	wp_clear_scheduled_hook( 'bms3o_background_run' );
 
 	if ( ! $remove ) {
 		return;
@@ -34,6 +35,8 @@ function bms3o_uninstall_site() {
 	delete_option( 'bms3o_settings' );
 	delete_option( 'bms3o_db_version' );
 	delete_option( 'bms3o_retry' );
+	delete_option( 'bms3o_background' );
+	delete_transient( 'bms3o_bb_dirs' );
 }
 
 if ( is_multisite() ) {

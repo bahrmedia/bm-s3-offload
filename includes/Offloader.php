@@ -503,6 +503,75 @@ final class Offloader {
 		return $errors;
 	}
 
+	/**
+	 * Moves objects between the public and the private prefix (server-side copy).
+	 *
+	 * @param string[] $paths      Relative paths.
+	 * @param bool     $is_private Target state.
+	 * @return array<string,string> Errors by path.
+	 */
+	public function set_privacy( array $paths, $is_private ) {
+		$errors = array();
+
+		foreach ( $this->items->get_many( $paths ) as $path => $item ) {
+			$key = $this->object_key( $path, (bool) $is_private );
+			if ( $key === $item['object_key'] && (bool) $is_private === (bool) $item['is_private'] ) {
+				continue;
+			}
+
+			try {
+				$client = $this->settings->client( $item['bucket'] );
+				$client->copy( $item['object_key'], $key, $this->upload_headers( $path, (bool) $is_private ) );
+			} catch ( \Exception $e ) {
+				$errors[ $path ] = $e->getMessage();
+				continue;
+			}
+
+			$old_key            = $item['object_key'];
+			$item['object_key'] = $key;
+			$item['is_private'] = (bool) $is_private;
+			$this->items->save( $item );
+
+			if ( $old_key !== $key ) {
+				try {
+					$client->delete( $old_key );
+				} catch ( \Exception $e ) {
+					unset( $e ); // A leftover copy is harmless; the item points to the new key.
+				}
+			}
+		}
+
+		return $errors;
+	}
+
+	/**
+	 * Checks that the object of an item exists in its bucket and optionally
+	 * uploads it again from the local copy.
+	 *
+	 * @param array $item Item row.
+	 * @param bool  $fix  Re-upload missing objects when a local copy exists.
+	 * @return string 'ok', 'fixed', 'missing' (no local copy) or an error message.
+	 */
+	public function verify( array $item, $fix = false ) {
+		try {
+			$client = $this->settings->client( $item['bucket'] );
+			if ( null !== $client->head( $item['object_key'] ) ) {
+				return 'ok';
+			}
+			$file = $this->absolute( $item['path'] );
+			if ( ! $fix || ! is_file( $file ) ) {
+				return 'missing';
+			}
+			$client->put_file( $item['object_key'], $file, $this->upload_headers( $item['path'], $item['is_private'] ) );
+			$item['filesize']      = (int) filesize( $file );
+			$item['local_removed'] = false;
+			$this->items->save( $item );
+			return 'fixed';
+		} catch ( \Exception $e ) {
+			return $e->getMessage();
+		}
+	}
+
 	/*
 	 * ------------------------------------------------------------------
 	 * URLs
@@ -549,7 +618,7 @@ final class Offloader {
 		if ( ! $this->settings->is_configured() ) {
 			return false;
 		}
-		if ( empty( $item['is_private'] ) || $this->private_scope > 0 ) {
+		if ( ! $this->is_restricted( $item ) || $this->private_scope > 0 ) {
 			return true;
 		}
 
@@ -561,6 +630,30 @@ final class Offloader {
 		 * @param array $item    Item row.
 		 */
 		return (bool) apply_filters( 'bms3o_can_access_private', current_user_can( 'manage_options' ), $item );
+	}
+
+	/**
+	 * Whether an item is private *and* access restricted.
+	 *
+	 * Restricted files (e.g. BuddyBoss media, protected shop downloads) get
+	 * signed URLs only after an access check. Other private files are
+	 * delivered to everybody, but only with expiring signed URLs.
+	 *
+	 * @param array $item Item row.
+	 * @return bool
+	 */
+	public function is_restricted( array $item ) {
+		if ( empty( $item['is_private'] ) ) {
+			return false;
+		}
+
+		/**
+		 * Filters whether a private item needs an access check before it is delivered.
+		 *
+		 * @param bool  $restricted Default true.
+		 * @param array $item       Item row.
+		 */
+		return (bool) apply_filters( 'bms3o_private_is_restricted', true, $item );
 	}
 
 	/**

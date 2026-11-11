@@ -63,6 +63,8 @@ final class ContentRewriter {
 			'bp_get_activity_content',
 			'bp_get_the_thread_message_content',
 			'bp_get_group_description',
+			// Page builders.
+			'elementor/frontend/the_content',
 		);
 
 		/**
@@ -186,8 +188,8 @@ final class ContentRewriter {
 				continue;
 			}
 			$item = $items[ $path ];
-			// Private files are only delivered through access-checked code paths.
-			if ( $item['is_private'] || ( ! $rewrite && ! $item['local_removed'] ) ) {
+			// Restricted files are only delivered through access-checked code paths.
+			if ( $this->offloader->is_restricted( $item ) || ( ! $rewrite && ! $item['local_removed'] && ! $item['is_private'] ) ) {
 				continue;
 			}
 			$new = $this->offloader->url( $item );

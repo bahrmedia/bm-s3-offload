@@ -21,11 +21,23 @@ final class Attachments {
 	const RETRY_OPTION = 'bms3o_retry';
 
 	/**
-	 * Upload directories of BuddyBoss photos, documents and videos. Files in
-	 * there are protected by BuddyBoss and are therefore stored privately -
-	 * also when the BuddyBoss integration is switched off.
+	 * Protected upload directories: BuddyBoss photos, documents and videos,
+	 * WooCommerce and Easy Digital Downloads product files. Files in there are
+	 * protected by those plugins and are therefore stored privately with
+	 * restricted access - also when an integration is switched off.
 	 */
-	const PRIVATE_DIRS = array( 'bb_medias/', 'bb_documents/', 'bb_videos/' );
+	const PROTECTED_DIRS = array( 'bb_medias/', 'bb_documents/', 'bb_videos/', 'woocommerce_uploads/', 'edd/' );
+
+	/**
+	 * Protected directories whose plugins have no delivery integration yet:
+	 * offloaded as private backup, but the local copies are always kept.
+	 */
+	const KEEP_LOCAL_DIRS = array( 'edd/' );
+
+	/**
+	 * Post meta: per-attachment privacy chosen in the media library ('1' or '0').
+	 */
+	const META_PRIVATE = '_bms3o_private';
 	const MAX_ATTEMPTS = 5;
 
 	/**
@@ -68,6 +80,7 @@ final class Attachments {
 		add_filter( 'wp_update_attachment_metadata', array( $this, 'on_update_metadata' ), 110, 2 );
 		add_action( 'delete_attachment', array( $this, 'on_delete' ), 5 );
 		add_filter( 'wp_unique_filename', array( $this, 'filter_unique_filename' ), 10, 3 );
+		add_filter( 'bms3o_private_is_restricted', array( $this, 'filter_private_is_restricted' ), 10, 2 );
 
 		// Delivery.
 		add_filter( 'wp_get_attachment_url', array( $this, 'filter_attachment_url' ), 99, 2 );
@@ -131,6 +144,19 @@ final class Attachments {
 			}
 		}
 
+		// WebP/AVIF copies of image optimisers that append the extension (EWWW, WebP Express: photo.jpg.webp).
+		$sidecars = array();
+		foreach ( $paths as $path ) {
+			$sidecars[] = $path . '.webp';
+			$sidecars[] = $path . '.avif';
+		}
+		$known = $this->offloader->items()->get_many( $sidecars );
+		foreach ( $sidecars as $sidecar ) {
+			if ( isset( $known[ $sidecar ] ) || is_file( $this->offloader->absolute( $sidecar ) ) ) {
+				$paths[] = $sidecar;
+			}
+		}
+
 		/**
 		 * Filters the files that belong to an attachment.
 		 *
@@ -151,24 +177,72 @@ final class Attachments {
 	 */
 	public function is_private( $attachment_id ) {
 		$file       = (string) get_post_meta( $attachment_id, '_wp_attached_file', true );
-		$is_private = false;
-		if ( $this->offloader->settings()->get( 'bb_private' ) ) {
-			foreach ( self::PRIVATE_DIRS as $dir ) {
-				if ( 0 === strpos( $file, $dir ) ) {
-					$is_private = true;
-					break;
-				}
-			}
+		// BuddyBoss media follow the "private media" setting, shop downloads are always private.
+		$is_private = $this->is_protected_path( $file ) && ( 0 !== strpos( $file, 'bb_' ) || $this->offloader->settings()->get( 'bb_private' ) );
+
+		$override = get_post_meta( $attachment_id, self::META_PRIVATE, true );
+		if ( '1' === $override ) {
+			$is_private = true;
+		} elseif ( '0' === $override && ! $this->is_protected_path( $file ) ) {
+			$is_private = false;
 		}
 
 		/**
 		 * Filters whether an attachment is stored privately and served with signed URLs only.
 		 *
-		 * @param bool   $is_private    Default: true for BuddyBoss media directories.
+		 * @param bool   $is_private    Default: true for protected directories and media marked private.
 		 * @param int    $attachment_id Attachment ID.
 		 * @param string $file          Relative path of the main file.
 		 */
 		return (bool) apply_filters( 'bms3o_attachment_is_private', $is_private, $attachment_id, $file );
+	}
+
+	/**
+	 * Whether a relative path is inside a protected upload directory.
+	 *
+	 * @param string $path Relative path.
+	 * @return bool
+	 */
+	public function is_protected_path( $path ) {
+		foreach ( self::PROTECTED_DIRS as $dir ) {
+			if ( 0 === strpos( (string) $path, $dir ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Only files in protected directories need an access check; other private
+	 * media are delivered with expiring signed URLs.
+	 *
+	 * @param bool  $restricted Current value.
+	 * @param array $item       Item row.
+	 * @return bool
+	 */
+	public function filter_private_is_restricted( $restricted, $item ) {
+		if ( isset( $item['source_type'], $item['path'] ) && Items::SOURCE_POST === $item['source_type'] ) {
+			return $this->is_protected_path( $item['path'] );
+		}
+		return $restricted;
+	}
+
+	/**
+	 * Makes an attachment private (expiring signed URLs) or public.
+	 *
+	 * @param int  $attachment_id Attachment ID.
+	 * @param bool $is_private    Target state.
+	 * @return array<string,string> Errors by path.
+	 */
+	public function set_privacy( $attachment_id, $is_private ) {
+		$file = (string) get_post_meta( $attachment_id, '_wp_attached_file', true );
+		if ( ! $is_private && $this->is_protected_path( $file ) ) {
+			return array( $file => __( 'Files in protected directories (BuddyBoss, WooCommerce, Easy Digital Downloads) cannot be made public.', 'bm-s3-offload' ) );
+		}
+
+		update_post_meta( $attachment_id, self::META_PRIVATE, $is_private ? '1' : '0' );
+		$paths = array_keys( $this->offloader->items()->get_by_source( Items::SOURCE_POST, (int) $attachment_id ) );
+		return $this->offloader->set_privacy( $paths, (bool) $is_private );
 	}
 
 	/**
@@ -222,7 +296,7 @@ final class Attachments {
 		if ( null === $remove_local ) {
 			$remove_local = $this->offloader->settings()->get( 'remove_local' ) || isset( $this->restored[ $attachment_id ] );
 		}
-		if ( $remove_local ) {
+		if ( $remove_local && $this->can_remove_local( $attachment_id ) ) {
 			$this->offloader->queue_local_removal( $paths );
 		}
 
@@ -246,7 +320,34 @@ final class Attachments {
 	 * @return string[] Removed paths.
 	 */
 	public function remove_local( $attachment_id ) {
+		if ( ! $this->can_remove_local( $attachment_id ) ) {
+			return array();
+		}
 		return $this->offloader->remove_local( $this->paths( $attachment_id ), true );
+	}
+
+	/**
+	 * Whether the local copies of an attachment may be removed.
+	 *
+	 * @param int $attachment_id Attachment ID.
+	 * @return bool
+	 */
+	public function can_remove_local( $attachment_id ) {
+		$file    = (string) get_post_meta( $attachment_id, '_wp_attached_file', true );
+		$allowed = true;
+		foreach ( self::KEEP_LOCAL_DIRS as $dir ) {
+			if ( 0 === strpos( $file, $dir ) ) {
+				$allowed = false;
+			}
+		}
+
+		/**
+		 * Filters whether the local copies of an attachment may be removed.
+		 *
+		 * @param bool $allowed       Default false for directories of plugins without delivery integration.
+		 * @param int  $attachment_id Attachment ID.
+		 */
+		return (bool) apply_filters( 'bms3o_can_remove_local', $allowed, $attachment_id );
 	}
 
 	/**
@@ -660,7 +761,7 @@ final class Attachments {
 			$result = $this->offloader->upload( Items::SOURCE_POST, (int) $attachment_id, $this->paths( (int) $attachment_id ), $this->is_private( (int) $attachment_id ) );
 			if ( empty( $result['errors'] ) ) {
 				unset( $retry[ $attachment_id ] );
-				if ( $this->offloader->settings()->get( 'remove_local' ) ) {
+				if ( $this->offloader->settings()->get( 'remove_local' ) && $this->can_remove_local( (int) $attachment_id ) ) {
 					$this->offloader->queue_local_removal( $this->paths( (int) $attachment_id ) );
 				}
 			} else {
