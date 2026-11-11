@@ -423,7 +423,7 @@ final class Attachments {
 		$intermediate = image_get_intermediate_size( $attachment_id, $size );
 		if ( $intermediate && ! empty( $intermediate['path'] ) ) {
 			$item = $this->offloader->items()->get( $intermediate['path'] );
-			$url = $item ? $this->offloader->url( $item ) : '';
+			$url  = $item ? $this->offloader->url( $item ) : '';
 			if ( '' !== $url ) {
 				return array( $url, (int) $intermediate['width'], (int) $intermediate['height'], true );
 			}

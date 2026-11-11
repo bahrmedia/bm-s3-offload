@@ -12,8 +12,10 @@ use BahrMedia\S3Offload\S3\Client;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Stores the settings in a single option. Every setting can be overridden by
- * a constant or environment variable named BMS3O_<KEY>, e.g.:
+ * Stores the settings in a single option.
+ *
+ * Every setting can be overridden by a constant or environment variable
+ * named BMS3O_<KEY>. Example:
  *
  *     define( 'BMS3O_ACCESS_KEY', '…' );
  *     define( 'BMS3O_SECRET_KEY', '…' );
@@ -98,8 +100,8 @@ final class Settings {
 		$defaults = self::defaults();
 		$resolved = array();
 
-		foreach ( $defaults as $key => $default ) {
-			$value = array_key_exists( $key, $stored ) ? $stored[ $key ] : $default;
+		foreach ( $defaults as $key => $fallback ) {
+			$value = array_key_exists( $key, $stored ) ? $stored[ $key ] : $fallback;
 			if ( in_array( $key, self::SECRETS, true ) ) {
 				$value = Crypto::decrypt( (string) $value );
 			}
@@ -109,7 +111,7 @@ final class Settings {
 				$value = $override;
 			}
 
-			$resolved[ $key ] = self::cast( $value, $default );
+			$resolved[ $key ] = self::cast( $value, $fallback );
 		}
 
 		/**
@@ -153,12 +155,12 @@ final class Settings {
 		$stored   = is_array( $stored ) ? $stored : array();
 		$defaults = self::defaults();
 
-		foreach ( $defaults as $key => $default ) {
+		foreach ( $defaults as $key => $fallback ) {
 			if ( $this->is_overridden( $key ) ) {
 				continue;
 			}
 
-			if ( is_bool( $default ) ) {
+			if ( is_bool( $fallback ) ) {
 				$stored[ $key ] = ! empty( $input[ $key ] );
 				continue;
 			}
@@ -176,7 +178,7 @@ final class Settings {
 				continue;
 			}
 
-			$stored[ $key ] = self::sanitize( $key, $input[ $key ], $default );
+			$stored[ $key ] = self::sanitize( $key, $input[ $key ], $fallback );
 		}
 
 		$previous = get_option( self::OPTION, array() );
@@ -300,20 +302,20 @@ final class Settings {
 	 * Casts a value to the type of its default.
 	 *
 	 * @param mixed $value   Value.
-	 * @param mixed $default Default value.
+	 * @param mixed $fallback Default value (defines the type).
 	 * @return mixed
 	 */
-	private static function cast( $value, $default ) {
-		if ( is_bool( $default ) ) {
+	private static function cast( $value, $fallback ) {
+		if ( is_bool( $fallback ) ) {
 			if ( is_string( $value ) ) {
 				return in_array( strtolower( trim( $value ) ), array( '1', 'true', 'yes', 'on' ), true );
 			}
 			return (bool) $value;
 		}
-		if ( is_int( $default ) ) {
+		if ( is_int( $fallback ) ) {
 			return (int) $value;
 		}
-		return is_scalar( $value ) ? (string) $value : (string) $default;
+		return is_scalar( $value ) ? (string) $value : (string) $fallback;
 	}
 
 	/**
@@ -321,10 +323,10 @@ final class Settings {
 	 *
 	 * @param string $key     Setting key.
 	 * @param mixed  $value   Raw value.
-	 * @param mixed  $default Default value.
+	 * @param mixed  $fallback Default value.
 	 * @return mixed
 	 */
-	private static function sanitize( $key, $value, $default ) {
+	private static function sanitize( $key, $value, $fallback ) {
 		$value = is_scalar( $value ) ? trim( (string) $value ) : '';
 
 		switch ( $key ) {
@@ -354,7 +356,7 @@ final class Settings {
 				return array_key_exists( $value, Providers::all() ) ? $value : 'custom';
 
 			default:
-				return is_int( $default ) ? (int) $value : sanitize_text_field( $value );
+				return is_int( $fallback ) ? (int) $value : sanitize_text_field( $value );
 		}
 	}
 }

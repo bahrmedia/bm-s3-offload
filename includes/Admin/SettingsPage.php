@@ -186,8 +186,24 @@ final class SettingsPage {
 				foreach ( Providers::all() as $id => $provider ) {
 					$options[ $id ] = $provider['label'];
 				}
-				$this->field( 'provider', __( 'Provider', 'bm-s3-offload' ), 'select', array( 'options' => $options, 'description' => __( 'Selecting a provider pre-fills endpoint, region and addressing style. Any S3-compatible service works.', 'bm-s3-offload' ) ) );
-				$this->field( 'endpoint', __( 'Endpoint', 'bm-s3-offload' ), 'url', array( 'placeholder' => 'https://s3.eu-central-1.amazonaws.com', 'description' => __( 'Without bucket name. Replace placeholders like {account} with your values.', 'bm-s3-offload' ) ) );
+				$this->field(
+					'provider',
+					__( 'Provider', 'bm-s3-offload' ),
+					'select',
+					array(
+						'options'     => $options,
+						'description' => __( 'Selecting a provider pre-fills endpoint, region and addressing style. Any S3-compatible service works.', 'bm-s3-offload' ),
+					)
+				);
+				$this->field(
+					'endpoint',
+					__( 'Endpoint', 'bm-s3-offload' ),
+					'url',
+					array(
+						'placeholder' => 'https://s3.eu-central-1.amazonaws.com',
+						'description' => __( 'Without bucket name. Replace placeholders like {account} with your values.', 'bm-s3-offload' ),
+					)
+				);
 				$this->field( 'region', __( 'Region', 'bm-s3-offload' ), 'text', array( 'placeholder' => 'eu-central-1' ) );
 				$this->field( 'bucket', __( 'Bucket', 'bm-s3-offload' ), 'text' );
 				$this->field( 'access_key', __( 'Access key ID', 'bm-s3-offload' ), 'text', array( 'autocomplete' => 'off' ) );
@@ -224,9 +240,26 @@ final class SettingsPage {
 			<table class="form-table" role="presentation">
 				<?php
 				$this->field( 'rewrite_urls', __( 'Serve from bucket', 'bm-s3-offload' ), 'checkbox', array( 'label' => __( 'Rewrite media URLs to the bucket or CDN. Files without local copy are always served from the bucket.', 'bm-s3-offload' ) ) );
-				$this->field( 'delivery_domain', __( 'CDN / custom domain', 'bm-s3-offload' ), 'url', array( 'placeholder' => 'https://cdn.example.com', 'description' => __( 'Optional. Must point to the bucket root (the object key is appended). Signed URLs always use the endpoint.', 'bm-s3-offload' ) ) );
+				$this->field(
+					'delivery_domain',
+					__( 'CDN / custom domain', 'bm-s3-offload' ),
+					'url',
+					array(
+						'placeholder' => 'https://cdn.example.com',
+						'description' => __( 'Optional. Must point to the bucket root (the object key is appended). Signed URLs always use the endpoint.', 'bm-s3-offload' ),
+					)
+				);
 				$this->field( 'sign_all', __( 'Signed URLs for all files', 'bm-s3-offload' ), 'checkbox', array( 'label' => __( 'Use a completely private bucket and deliver every file with a pre-signed URL.', 'bm-s3-offload' ) ) );
-				$this->field( 'signed_ttl', __( 'Signed URL lifetime', 'bm-s3-offload' ), 'number', array( 'min' => 60, 'max' => 604800, 'description' => __( 'Seconds (60–604800). URLs stay identical for half of this time so browsers can cache them.', 'bm-s3-offload' ) ) );
+				$this->field(
+					'signed_ttl',
+					__( 'Signed URL lifetime', 'bm-s3-offload' ),
+					'number',
+					array(
+						'min'         => 60,
+						'max'         => 604800,
+						'description' => __( 'Seconds (60–604800). URLs stay identical for half of this time so browsers can cache them.', 'bm-s3-offload' ),
+					)
+				);
 				?>
 			</table>
 
@@ -350,7 +383,7 @@ final class SettingsPage {
 		check_admin_referer( 'bms3o_save' );
 
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Sanitized per field in Settings::save().
-		$input = isset( $_POST['bms3o'] ) && is_array( $_POST['bms3o'] ) ? wp_unslash( $_POST['bms3o'] ) : array();
+		$input  = isset( $_POST['bms3o'] ) && is_array( $_POST['bms3o'] ) ? wp_unslash( $_POST['bms3o'] ) : array();
 		$errors = $this->plugin->settings->save( $input );
 		if ( ! empty( $errors ) ) {
 			set_transient( 'bms3o_save_errors_' . get_current_user_id(), $errors, MINUTE_IN_SECONDS );
@@ -505,6 +538,7 @@ final class SettingsPage {
 	public function ajax_bulk() {
 		$this->verify_ajax();
 
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- Verified in verify_ajax().
 		$operation = isset( $_POST['operation'] ) ? sanitize_key( wp_unslash( $_POST['operation'] ) ) : '';
 		if ( ! in_array( $operation, Bulk::OPERATIONS, true ) || ! $this->plugin->settings->is_configured() ) {
 			wp_send_json_error( array( 'message' => __( 'Invalid request.', 'bm-s3-offload' ) ), 400 );
@@ -512,6 +546,7 @@ final class SettingsPage {
 
 		$cursor  = isset( $_POST['cursor'] ) ? absint( $_POST['cursor'] ) : 0;
 		$options = array( 'remove_local' => ! empty( $_POST['remove_local'] ) );
+		// phpcs:enable
 
 		/**
 		 * Filters the number of items processed per AJAX request.

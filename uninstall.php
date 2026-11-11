@@ -37,7 +37,13 @@ function bms3o_uninstall_site() {
 }
 
 if ( is_multisite() ) {
-	foreach ( get_sites( array( 'fields' => 'ids', 'number' => 0 ) ) as $bms3o_site_id ) {
+	$bms3o_site_ids = get_sites(
+		array(
+			'fields' => 'ids',
+			'number' => 0,
+		)
+	);
+	foreach ( $bms3o_site_ids as $bms3o_site_id ) {
 		switch_to_blog( $bms3o_site_id );
 		bms3o_uninstall_site();
 		restore_current_blog();

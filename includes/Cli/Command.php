@@ -53,20 +53,28 @@ final class Command {
 		$settings = $this->plugin->settings;
 		$stats    = $this->plugin->offloader->items()->stats();
 
-		$rows = array(
-			array( 'key' => 'configured', 'value' => $settings->is_configured() ? 'yes' : 'no' ),
-			array( 'key' => 'endpoint', 'value' => $settings->get( 'endpoint' ) ),
-			array( 'key' => 'bucket', 'value' => $settings->get( 'bucket' ) ),
-			array( 'key' => 'region', 'value' => $settings->get( 'region' ) ),
-			array( 'key' => 'remove_local', 'value' => $settings->get( 'remove_local' ) ? 'yes' : 'no' ),
-			array( 'key' => 'buddyboss', 'value' => $this->plugin->buddyboss ? 'active' : 'inactive' ),
-			array( 'key' => 'files', 'value' => $stats['files'] ),
-			array( 'key' => 'bytes', 'value' => size_format( $stats['bytes'], 1 ) ),
-			array( 'key' => 'local_removed', 'value' => $stats['local_removed'] ),
-			array( 'key' => 'private', 'value' => $stats['private'] ),
-			array( 'key' => 'pending_offload', 'value' => $this->plugin->bulk->remaining( 'offload' ) ),
-			array( 'key' => 'pending_retries', 'value' => count( $this->plugin->attachments->pending_retries() ) ),
+		$values = array(
+			'configured'      => $settings->is_configured() ? 'yes' : 'no',
+			'endpoint'        => $settings->get( 'endpoint' ),
+			'bucket'          => $settings->get( 'bucket' ),
+			'region'          => $settings->get( 'region' ),
+			'remove_local'    => $settings->get( 'remove_local' ) ? 'yes' : 'no',
+			'buddyboss'       => $this->plugin->buddyboss ? 'active' : 'inactive',
+			'files'           => $stats['files'],
+			'bytes'           => size_format( $stats['bytes'], 1 ),
+			'local_removed'   => $stats['local_removed'],
+			'private'         => $stats['private'],
+			'pending_offload' => $this->plugin->bulk->remaining( 'offload' ),
+			'pending_retries' => count( $this->plugin->attachments->pending_retries() ),
 		);
+
+		$rows = array();
+		foreach ( $values as $key => $value ) {
+			$rows[] = array(
+				'key'   => $key,
+				'value' => $value,
+			);
+		}
 
 		\WP_CLI\Utils\format_items( isset( $assoc_args['format'] ) ? $assoc_args['format'] : 'table', $rows, array( 'key', 'value' ) );
 	}
@@ -78,7 +86,7 @@ final class Command {
 	 * @param array $assoc_args Named arguments.
 	 * @return void
 	 */
-	public function test( $args, $assoc_args ) {
+	public function test( $args, $assoc_args ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- WP-CLI signature.
 		$failed = false;
 		foreach ( $this->plugin->offloader->test_connection() as $step ) {
 			$line = ( $step['ok'] ? '✔ ' : '✘ ' ) . $step['step'] . ( '' !== $step['message'] ? ' – ' . $step['message'] : '' );
@@ -198,7 +206,7 @@ final class Command {
 	 * @param array $assoc_args Named arguments.
 	 * @return void
 	 */
-	public function bb_sync( $args, $assoc_args ) {
+	public function bb_sync( $args, $assoc_args ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- WP-CLI signature.
 		if ( ! $this->plugin->buddyboss ) {
 			WP_CLI::error( 'BuddyBoss integration is not active.' );
 		}

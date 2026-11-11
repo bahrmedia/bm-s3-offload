@@ -138,8 +138,8 @@ final class ContentRewriter {
 
 		return (string) preg_replace_callback(
 			'#(?:https?:)?(?:' . implode( '|', $quoted ) . ')([^\s"\'<>()\\\\?\#,]+)(?:\?[^\s"\'<>]*)?#i',
-			static function ( $match ) use ( $local ) {
-				return $local . rawurldecode( $match[1] );
+			static function ( $found ) use ( $local ) {
+				return $local . rawurldecode( $found[1] );
 			},
 			$content
 		);

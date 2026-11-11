@@ -91,6 +91,8 @@ class Client {
 	 * Constructor.
 	 *
 	 * @param array $config {
+	 *     Client configuration.
+	 *
 	 *     @type string $endpoint   Endpoint URL, e.g. "https://s3.eu-central-1.amazonaws.com".
 	 *     @type string $region     Signing region, e.g. "eu-central-1" (R2: "auto").
 	 *     @type string $bucket     Bucket name.
@@ -314,10 +316,8 @@ class Client {
 			}
 
 			$doc = self::parse_xml( $response['body'] );
-			if ( $doc && isset( $doc->Error ) ) {
-				foreach ( $doc->Error as $error ) {
-					$errors[ (string) $error->Key ] = (string) $error->Code . ': ' . (string) $error->Message;
-				}
+			foreach ( self::nodes( $doc, 'Error' ) as $error ) {
+				$errors[ self::text( $error, 'Key' ) ] = self::text( $error, 'Code' ) . ': ' . self::text( $error, 'Message' );
 			}
 		}
 
@@ -351,14 +351,14 @@ class Client {
 		$next     = '';
 
 		if ( $doc ) {
-			foreach ( $doc->Contents as $item ) {
+			foreach ( self::nodes( $doc, 'Contents' ) as $item ) {
 				$objects[] = array(
-					'key'  => (string) $item->Key,
-					'size' => (int) $item->Size,
+					'key'  => self::text( $item, 'Key' ),
+					'size' => (int) self::text( $item, 'Size' ),
 				);
 			}
-			if ( 'true' === (string) $doc->IsTruncated ) {
-				$next = (string) $doc->NextContinuationToken;
+			if ( 'true' === self::text( $doc, 'IsTruncated' ) ) {
+				$next = self::text( $doc, 'NextContinuationToken' );
 			}
 		}
 
@@ -436,7 +436,7 @@ class Client {
 
 		$response  = $this->request( 'POST', $key, array( 'uploads' => '' ), $headers );
 		$doc       = self::parse_xml( $response['body'] );
-		$upload_id = $doc ? (string) $doc->UploadId : '';
+		$upload_id = self::text( $doc, 'UploadId' );
 		if ( '' === $upload_id ) {
 			throw new S3Exception( 'Multipart upload could not be initiated.' );
 		}
@@ -466,7 +466,7 @@ class Client {
 					array( 'Content-Type' => 'application/octet-stream' ),
 					$chunk
 				);
-				$etag = isset( $part_response['headers']['etag'] ) ? (string) $part_response['headers']['etag'] : '';
+				$etag          = isset( $part_response['headers']['etag'] ) ? (string) $part_response['headers']['etag'] : '';
 				if ( '' === $etag ) {
 					throw new S3Exception( 'Missing ETag for uploaded part.' );
 				}
@@ -491,7 +491,7 @@ class Client {
 			// S3 may answer 200 OK with an error document for this operation.
 			$doc = self::parse_xml( $response['body'] );
 			if ( $doc && 'Error' === $doc->getName() ) {
-				throw new S3Exception( (string) $doc->Message, 500, (string) $doc->Code );
+				throw new S3Exception( self::text( $doc, 'Message' ), 500, self::text( $doc, 'Code' ) );
 			}
 		} catch ( S3Exception $e ) {
 			$this->abort_multipart( $key, $upload_id );
@@ -508,13 +508,15 @@ class Client {
 	 */
 	private static function read_chunk( $handle, $length ) {
 		$data = '';
-		while ( strlen( $data ) < $length && ! feof( $handle ) ) {
+		$missing = $length;
+		while ( $missing > 0 && ! feof( $handle ) ) {
 			// phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fread
-			$read = fread( $handle, $length - strlen( $data ) );
+			$read = fread( $handle, $missing );
 			if ( false === $read || '' === $read ) {
 				break;
 			}
-			$data .= $read;
+			$data    .= $read;
+			$missing -= strlen( $read );
 		}
 		return $data;
 	}
@@ -632,9 +634,9 @@ class Client {
 			$code    = '';
 			$message = sprintf( 'HTTP %d', $status );
 			$doc     = '' !== $response_body ? self::parse_xml( $response_body ) : null;
-			if ( $doc && isset( $doc->Code ) ) {
-				$code    = (string) $doc->Code;
-				$message = trim( $code . ': ' . (string) $doc->Message, ': ' );
+			if ( '' !== self::text( $doc, 'Code' ) ) {
+				$code    = self::text( $doc, 'Code' );
+				$message = trim( $code . ': ' . self::text( $doc, 'Message' ), ': ' );
 			}
 			throw new S3Exception( $message, $status, $code );
 		}
@@ -721,6 +723,38 @@ class Client {
 		$k_signing = hash_hmac( 'sha256', 'aws4_request', $k_service, true );
 
 		return hash_hmac( 'sha256', $string_to_sign, $k_signing );
+	}
+
+	/**
+	 * Text of the first child element with the given name (S3 XML uses
+	 * PascalCase element names, so they are accessed by name, not as properties).
+	 *
+	 * @param \SimpleXMLElement|null $node Parent element.
+	 * @param string                 $name Element name.
+	 * @return string
+	 */
+	private static function text( $node, $name ) {
+		$found = self::nodes( $node, $name );
+		return empty( $found ) ? '' : (string) $found[0];
+	}
+
+	/**
+	 * Child elements with the given name.
+	 *
+	 * @param \SimpleXMLElement|null $node Parent element.
+	 * @param string                 $name Element name.
+	 * @return \SimpleXMLElement[]
+	 */
+	private static function nodes( $node, $name ) {
+		$found = array();
+		if ( $node instanceof \SimpleXMLElement ) {
+			foreach ( $node->children() as $child ) {
+				if ( $child->getName() === $name ) {
+					$found[] = $child;
+				}
+			}
+		}
+		return $found;
 	}
 
 	/**

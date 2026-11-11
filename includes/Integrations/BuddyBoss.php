@@ -503,12 +503,12 @@ final class BuddyBoss {
 	/**
 	 * Relative avatar directory of an object.
 	 *
-	 * @param string      $object     'user', 'group' or 'blog'.
-	 * @param int         $item_id    Object ID.
-	 * @param string|bool $avatar_dir Custom avatar directory.
+	 * @param string      $object_type 'user', 'group' or 'blog'.
+	 * @param int         $item_id     Object ID.
+	 * @param string|bool $avatar_dir  Custom avatar directory.
 	 * @return string '' if outside the uploads directory.
 	 */
-	private function avatar_dir( $object, $item_id, $avatar_dir = false ) {
+	private function avatar_dir( $object_type, $item_id, $avatar_dir = false ) {
 		if ( ! function_exists( 'bp_core_avatar_upload_path' ) || ! $item_id ) {
 			return '';
 		}
@@ -518,7 +518,7 @@ final class BuddyBoss {
 				'group' => 'group-avatars',
 				'blog'  => 'blog-avatars',
 			);
-			$avatar_dir = isset( $dirs[ $object ] ) ? $dirs[ $object ] : $object . '-avatars';
+			$avatar_dir = isset( $dirs[ $object_type ] ) ? $dirs[ $object_type ] : $object_type . '-avatars';
 		}
 		return $this->offloader->relative( bp_core_avatar_upload_path() . '/' . $avatar_dir . '/' . (int) $item_id );
 	}
@@ -655,16 +655,16 @@ final class BuddyBoss {
 	 * the calling frame; if that fails, $default is returned and BuddyBoss'
 	 * default behaviour is kept.
 	 *
-	 * @param string $function Function name.
-	 * @param int    $index    Argument index.
-	 * @param mixed  $default  Value when the argument was not passed.
+	 * @param string $function_name Function name.
+	 * @param int    $index         Argument index.
+	 * @param mixed  $fallback      Value when the argument was not passed.
 	 * @return mixed|null Null if the function is not on the call stack.
 	 */
-	private static function caller_argument( $function, $index, $default = null ) {
+	private static function caller_argument( $function_name, $index, $fallback = null ) {
 		// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_debug_backtrace -- See method description.
 		foreach ( debug_backtrace( 0, 12 ) as $frame ) {
-			if ( isset( $frame['function'] ) && $function === $frame['function'] && empty( $frame['class'] ) ) {
-				return isset( $frame['args'][ $index ] ) ? $frame['args'][ $index ] : $default;
+			if ( isset( $frame['function'] ) && $function_name === $frame['function'] && empty( $frame['class'] ) ) {
+				return isset( $frame['args'][ $index ] ) ? $frame['args'][ $index ] : $fallback;
 			}
 		}
 		return null;
@@ -730,9 +730,9 @@ final class BuddyBoss {
 
 		$stale = array_diff( array_keys( $this->offloader->items()->get_in_dir( $dir ) ), $local );
 		if ( ! empty( $stale ) ) {
-			$errors             = $this->offloader->delete_remote( $stale );
-			$result['deleted']  = count( $stale ) - count( $errors );
-			$result['errors']  += count( $errors );
+			$errors            = $this->offloader->delete_remote( $stale );
+			$result['deleted'] = count( $stale ) - count( $errors );
+			$result['errors'] += count( $errors );
 		}
 
 		if ( ! empty( $local ) ) {

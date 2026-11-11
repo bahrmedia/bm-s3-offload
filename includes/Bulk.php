@@ -69,7 +69,7 @@ final class Bulk {
 	 * @param string $operation Operation.
 	 * @param int    $cursor    Last processed ID (or offset for bb_sync).
 	 * @param int    $limit     Batch size.
-	 * @param array  $options   { @type bool $remove_local Remove local copies after offloading. }
+	 * @param array  $options   Options: 'remove_local' (bool) removes local copies after offloading, 'force' (bool) uploads unchanged files again.
 	 * @return array{cursor:int,processed:int,done:bool,errors:array<int,string>,total?:int}
 	 */
 	public function run( $operation, $cursor, $limit, array $options = array() ) {
@@ -151,12 +151,48 @@ final class Bulk {
 	 */
 	private function ids( $operation, $cursor, $limit ) {
 		global $wpdb;
-		$query = $this->query( $operation );
-		if ( null === $query ) {
-			return array();
+		$items = Items::table();
+
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery -- Table names only.
+		switch ( $operation ) {
+			case 'offload':
+				$sql = $wpdb->prepare(
+					"SELECT p.ID FROM {$wpdb->posts} p WHERE p.post_type = 'attachment' AND p.ID > %d
+					AND NOT EXISTS ( SELECT 1 FROM {$items} i WHERE i.source_type = %s AND i.source_id = p.ID )
+					ORDER BY p.ID ASC LIMIT %d",
+					$cursor,
+					Items::SOURCE_POST,
+					$limit
+				);
+				break;
+
+			case 'remove_local':
+			case 'download':
+				$sql = $wpdb->prepare(
+					"SELECT DISTINCT source_id FROM {$items} WHERE source_type = %s AND local_removed = %d AND source_id > %d ORDER BY source_id ASC LIMIT %d",
+					Items::SOURCE_POST,
+					'download' === $operation ? 1 : 0,
+					$cursor,
+					$limit
+				);
+				break;
+
+			case 'unoffload':
+				$sql = $wpdb->prepare(
+					"SELECT DISTINCT source_id FROM {$items} WHERE source_type = %s AND source_id > %d ORDER BY source_id ASC LIMIT %d",
+					Items::SOURCE_POST,
+					$cursor,
+					$limit
+				);
+				break;
+
+			default:
+				return array();
 		}
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery
-		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT DISTINCT {$query['column']} {$query['from']} AND {$query['column']} > %d ORDER BY {$query['column']} ASC LIMIT %d", array_merge( $query['args'], array( (int) $cursor, (int) $limit ) ) ) );
+
+		$ids = $wpdb->get_col( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared above.
+		// phpcs:enable
+
 		return array_map( 'intval', (array) $ids );
 	}
 
@@ -168,48 +204,39 @@ final class Bulk {
 	 */
 	private function count( $operation ) {
 		global $wpdb;
-		$query = $this->query( $operation );
-		if ( null === $query ) {
-			return 0;
-		}
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.DirectDatabaseQuery
-		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(DISTINCT {$query['column']}) {$query['from']}", $query['args'] ) );
-	}
-
-	/**
-	 * FROM/WHERE clause (without cursor) of an operation.
-	 *
-	 * @param string $operation Operation.
-	 * @return array{column:string,from:string,args:array}|null
-	 */
-	private function query( $operation ) {
-		global $wpdb;
 		$items = Items::table();
 
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery -- Table names only.
 		switch ( $operation ) {
 			case 'offload':
-				return array(
-					'column' => 'p.ID',
-					'from'   => "FROM {$wpdb->posts} p WHERE p.post_type = 'attachment' AND NOT EXISTS ( SELECT 1 FROM {$items} i WHERE i.source_type = %s AND i.source_id = p.ID )",
-					'args'   => array( Items::SOURCE_POST ),
+				$sql = $wpdb->prepare(
+					"SELECT COUNT(*) FROM {$wpdb->posts} p WHERE p.post_type = 'attachment'
+					AND NOT EXISTS ( SELECT 1 FROM {$items} i WHERE i.source_type = %s AND i.source_id = p.ID )",
+					Items::SOURCE_POST
 				);
+				break;
 
 			case 'remove_local':
 			case 'download':
-				return array(
-					'column' => 'source_id',
-					'from'   => "FROM {$items} WHERE source_type = %s AND local_removed = %d",
-					'args'   => array( Items::SOURCE_POST, 'download' === $operation ? 1 : 0 ),
+				$sql = $wpdb->prepare(
+					"SELECT COUNT(DISTINCT source_id) FROM {$items} WHERE source_type = %s AND local_removed = %d",
+					Items::SOURCE_POST,
+					'download' === $operation ? 1 : 0
 				);
+				break;
 
 			case 'unoffload':
-				return array(
-					'column' => 'source_id',
-					'from'   => "FROM {$items} WHERE source_type = %s",
-					'args'   => array( Items::SOURCE_POST ),
-				);
+				$sql = $wpdb->prepare( "SELECT COUNT(DISTINCT source_id) FROM {$items} WHERE source_type = %s", Items::SOURCE_POST );
+				break;
+
+			default:
+				return 0;
 		}
-		return null;
+
+		$count = $wpdb->get_var( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- Prepared above.
+		// phpcs:enable
+
+		return (int) $count;
 	}
 
 	/**

@@ -26,10 +26,10 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Items {
 
-	const DB_VERSION   = '1';
-	const CACHE_GROUP  = 'bms3o_items';
-	const SOURCE_POST  = 'attachment';
-	const NOT_FOUND    = 0;
+	const DB_VERSION  = '1';
+	const CACHE_GROUP = 'bms3o_items';
+	const SOURCE_POST = 'attachment';
+	const NOT_FOUND   = 0;
 
 	/**
 	 * Request cache per site: blog ID => path => row|0.
@@ -149,7 +149,7 @@ final class Items {
 			}
 
 			foreach ( $chunk as $path ) {
-				$value                 = isset( $by_path[ $path ] ) ? $by_path[ $path ] : self::NOT_FOUND;
+				$value = isset( $by_path[ $path ] ) ? $by_path[ $path ] : self::NOT_FOUND;
 				$this->cache[ get_current_blog_id() ][ $path ] = $value;
 				wp_cache_set( self::cache_key( $path ), $value, self::CACHE_GROUP, DAY_IN_SECONDS );
 				if ( is_array( $value ) ) {
@@ -208,7 +208,7 @@ final class Items {
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 			$rows = $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE source_type = %s AND source_id IN ({$placeholders})", array_merge( array( $type ), $chunk ) ), ARRAY_A );
 			foreach ( (array) $rows as $row ) {
-				$row                          = self::normalize( $row );
+				$row = self::normalize( $row );
 				$this->cache[ get_current_blog_id() ][ $row['path'] ] = $row;
 			}
 		}
@@ -278,7 +278,7 @@ final class Items {
 			'created_at'    => current_time( 'mysql', true ),
 		);
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery -- Table name only.
 		$wpdb->query(
 			$wpdb->prepare(
 				"INSERT INTO {$table} (source_type, source_id, path, path_hash, bucket, object_key, is_private, local_removed, filesize, created_at)
@@ -297,6 +297,7 @@ final class Items {
 				$row['created_at']
 			)
 		);
+		// phpcs:enable
 
 		$this->forget( array( $row['path'] ) );
 	}

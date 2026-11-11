@@ -570,8 +570,10 @@ final class Offloader {
 	 * (private item outside a trusted scope) or the storage is not configured
 	 * correctly; callers then keep the local URL.
 	 *
-	 * @param array $item  Item row.
-	 * @param array $args  {
+	 * @param array $item Item row.
+	 * @param array $args {
+	 *     Optional. Delivery arguments.
+	 *
 	 *     @type bool   $sign        Force a signed URL.
 	 *     @type string $disposition Content-Disposition for signed URLs (e.g. "attachment").
 	 *     @type int    $ttl         Lifetime of signed URLs in seconds.

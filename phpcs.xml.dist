@@ -35,5 +35,13 @@
 		</properties>
 	</rule>
 
+	<!--
+		Exception messages of the S3 client are never printed raw: every place that
+		displays them escapes the output (esc_html, textContent in JS).
+	-->
+	<rule ref="WordPress.Security.EscapeOutput.ExceptionNotEscaped">
+		<exclude-pattern>/includes/S3/*</exclude-pattern>
+	</rule>
+
 	<rule ref="PHPCompatibilityWP"/>
 </ruleset>
