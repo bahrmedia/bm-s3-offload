@@ -45,6 +45,7 @@ final class MediaLibrary {
 		add_filter( 'handle_bulk_actions-upload', array( $this, 'handle_bulk' ), 10, 3 );
 		add_action( 'admin_post_bms3o_item', array( $this, 'handle_single' ) );
 		add_action( 'attachment_submitbox_misc_actions', array( $this, 'submitbox' ), 20 );
+		add_filter( 'attachment_fields_to_edit', array( $this, 'modal_field' ), 20, 2 );
 		add_action( 'admin_notices', array( $this, 'notice' ) );
 		add_action( 'admin_head-upload.php', array( $this, 'column_style' ) );
 		add_action( 'restrict_manage_posts', array( $this, 'status_filter' ) );
@@ -376,6 +377,52 @@ final class MediaLibrary {
 			echo ' <a href="' . esc_url( SettingsPage::url( 'tools' ) ) . '">' . esc_html__( 'Run the connection test', 'bm-s3-offload' ) . '</a>';
 		}
 		echo '</p></div>';
+	}
+
+	/**
+	 * Storage status and actions in the media modal (grid view, "Attachment details").
+	 *
+	 * @param array    $fields Form fields.
+	 * @param \WP_Post $post   Attachment.
+	 * @return array
+	 */
+	public function modal_field( $fields, $post ) {
+		if ( ! $post instanceof \WP_Post || ! current_user_can( 'edit_post', $post->ID ) ) {
+			return $fields;
+		}
+
+		$fields['bms3o'] = array(
+			'label' => __( 'Storage', 'bm-s3-offload' ),
+			'input' => 'html',
+			'html'  => $this->status_html( $post->ID ),
+		);
+		return $fields;
+	}
+
+	/**
+	 * Status text with action links.
+	 *
+	 * @param int $attachment_id Attachment ID.
+	 * @return string HTML.
+	 */
+	private function status_html( $attachment_id ) {
+		$item = $this->plugin->attachments->main_item( $attachment_id );
+		if ( $item ) {
+			$status = $item['local_removed'] ? __( 'In bucket only', 'bm-s3-offload' ) : __( 'In bucket and local', 'bm-s3-offload' );
+			if ( $item['is_private'] ) {
+				$status .= ' · ' . __( 'private', 'bm-s3-offload' );
+			}
+		} else {
+			$status = __( 'Local only', 'bm-s3-offload' );
+		}
+
+		$labels = self::actions();
+		$links  = array();
+		foreach ( $this->applicable( $attachment_id ) as $action ) {
+			$links[] = '<a href="' . esc_url( $this->action_url( $action, $attachment_id ) ) . '">' . esc_html( $labels[ $action ] ) . '</a>';
+		}
+
+		return '<span class="bms3o-status">' . esc_html( $status ) . '</span>' . ( $links ? '<br>' . implode( ' | ', $links ) : '' );
 	}
 
 	/**
