@@ -403,7 +403,7 @@ final class SettingsPage {
 		check_admin_referer( 'bms3o_save' );
 
 		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- Sanitized per field in Settings::save().
-		$input  = isset( $_POST['bms3o'] ) && is_array( $_POST['bms3o'] ) ? wp_unslash( $_POST['bms3o'] ) : array();
+		$input       = isset( $_POST['bms3o'] ) && is_array( $_POST['bms3o'] ) ? wp_unslash( $_POST['bms3o'] ) : array();
 		$was_private = (bool) $this->plugin->settings->get( 'bb_private' );
 		$errors      = $this->plugin->settings->save( $input );
 

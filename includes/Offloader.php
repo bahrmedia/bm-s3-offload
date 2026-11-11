@@ -233,7 +233,7 @@ final class Offloader {
 			$size  = (int) filesize( $file );
 			$mtime = (int) filemtime( $file );
 			$key   = $this->object_key( $path, $is_private );
-			$item = isset( $existing[ $path ] ) ? $existing[ $path ] : null;
+			$item  = isset( $existing[ $path ] ) ? $existing[ $path ] : null;
 
 			// Never let two sources share one object.
 			if ( $item && ( $item['source_type'] !== $source_type || $item['source_id'] !== (int) $source_id ) ) {

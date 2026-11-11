@@ -75,7 +75,7 @@ $post_id     = wp_insert_post(
 		'post_content' => '<a href="' . $evil . '">x</a>',
 	)
 );
-$saved = get_post_field( 'post_content', $post_id, 'raw' );
+$saved       = get_post_field( 'post_content', $post_id, 'raw' );
 bms3o_t( false === strpos( $saved, 'onmouseover=' ) && false === strpos( $saved, '<img' ), 'Encoded markup in URLs is not decoded on save (no stored XSS)', $saved );
 wp_delete_post( $post_id, true );
 
