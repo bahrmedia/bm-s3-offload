@@ -21,6 +21,17 @@ final class Attachments {
 	const RETRY_OPTION = 'bms3o_retry';
 
 	/**
+	 * Cron hook that offloads large attachments after the upload request.
+	 */
+	const ASYNC_HOOK = 'bms3o_offload_attachment';
+
+	/**
+	 * Attachments larger than this (all files together) are offloaded in the
+	 * background, so big videos do not hit the time limit of the upload request.
+	 */
+	const ASYNC_THRESHOLD = 67108864; // 64 MiB.
+
+	/**
 	 * Protected upload directories: BuddyBoss photos, documents and videos,
 	 * WooCommerce and Easy Digital Downloads product files. Files in there are
 	 * protected by those plugins and are therefore stored privately with
@@ -92,8 +103,9 @@ final class Attachments {
 		add_filter( 'load_image_to_edit_path', array( $this, 'filter_edit_path' ), 5, 3 );
 		add_filter( 'wp_get_original_image_path', array( $this, 'filter_original_image_path' ), 5, 2 );
 
-		// Retries.
+		// Retries and background offloads.
 		add_action( 'bms3o_cron', array( $this, 'retry_failed' ) );
+		add_action( self::ASYNC_HOOK, array( $this, 'offload_in_background' ) );
 	}
 
 	/*
@@ -176,7 +188,7 @@ final class Attachments {
 	 * @return bool
 	 */
 	public function is_private( $attachment_id ) {
-		$file       = (string) get_post_meta( $attachment_id, '_wp_attached_file', true );
+		$file = (string) get_post_meta( $attachment_id, '_wp_attached_file', true );
 		// BuddyBoss media follow the "private media" setting, shop downloads are always private.
 		$is_private = $this->is_protected_path( $file ) && ( 0 !== strpos( $file, 'bb_' ) || $this->offloader->settings()->get( 'bb_private' ) );
 
@@ -398,8 +410,60 @@ final class Attachments {
 			return $data;
 		}
 
-		$this->offload( (int) $attachment_id, is_array( $data ) ? $data : array() );
+		$data = is_array( $data ) ? $data : array();
+		if ( $this->should_defer( (int) $attachment_id, $data ) ) {
+			if ( ! wp_next_scheduled( self::ASYNC_HOOK, array( (int) $attachment_id ) ) ) {
+				wp_schedule_single_event( time(), self::ASYNC_HOOK, array( (int) $attachment_id ) );
+				spawn_cron();
+			}
+			return $data;
+		}
+
+		$this->offload( (int) $attachment_id, $data );
 		return $data;
+	}
+
+	/**
+	 * Whether an upload is too large to be offloaded within the upload request.
+	 *
+	 * @param int   $attachment_id Attachment ID.
+	 * @param array $meta          Metadata.
+	 * @return bool
+	 */
+	private function should_defer( $attachment_id, array $meta ) {
+		if ( wp_doing_cron() || ( defined( 'WP_CLI' ) && WP_CLI ) ) {
+			return false;
+		}
+
+		$size = 0;
+		foreach ( $this->paths( $attachment_id, $meta ) as $path ) {
+			$file = $this->offloader->absolute( $path );
+			$size += is_file( $file ) ? (int) filesize( $file ) : 0;
+		}
+
+		/**
+		 * Filters the size (bytes) above which attachments are offloaded in the background.
+		 *
+		 * @param int $threshold     Default 64 MiB.
+		 * @param int $attachment_id Attachment ID.
+		 */
+		return $size > (int) apply_filters( 'bms3o_async_threshold', self::ASYNC_THRESHOLD, $attachment_id );
+	}
+
+	/**
+	 * Cron: offloads a large attachment.
+	 *
+	 * @param int $attachment_id Attachment ID.
+	 * @return void
+	 */
+	public function offload_in_background( $attachment_id ) {
+		if ( ! get_post( $attachment_id ) || ! $this->offloader->settings()->is_configured() ) {
+			return;
+		}
+		if ( function_exists( 'set_time_limit' ) ) {
+			set_time_limit( 0 ); // phpcs:ignore Squiz.PHP.DiscouragedFunctions.Discouraged -- Large uploads in a cron request.
+		}
+		$this->offload( (int) $attachment_id );
 	}
 
 	/**

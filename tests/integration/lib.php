@@ -117,6 +117,7 @@ function bms3o_t_image( $width = 800, $height = 600, $name = 'test.png' ) {
  *
  * @param string $file Path.
  * @return int Attachment ID.
+ * @throws RuntimeException When the import fails.
  */
 function bms3o_t_import( $file ) {
 	require_once ABSPATH . 'wp-admin/includes/file.php';

@@ -61,7 +61,7 @@ $post_id = wp_insert_post(
 		'post_content' => '<img src="' . $url . '"><img src="' . $thumb . '">',
 	)
 );
-$saved = get_post_field( 'post_content', $post_id, 'raw' );
+$saved   = get_post_field( 'post_content', $post_id, 'raw' );
 bms3o_t( false !== strpos( $saved, $local ) && false === strpos( $saved, $url ) && false === strpos( $saved, $thumb ), 'Bucket URLs are saved as local URLs', $saved );
 wp_delete_post( $post_id, true );
 
@@ -101,7 +101,7 @@ bms3o_t( empty( $exists ), 'Regenerated sizes offloaded and removed locally', ar
 
 bms3o_t_section( 'Unique file names with bucket-only files' );
 
-$first  = bms3o_t_import( bms3o_t_image( 400, 300, 'same-name.png' ) );
+$first = bms3o_t_import( bms3o_t_image( 400, 300, 'same-name.png' ) );
 $media->remove_local( $first );
 $second = bms3o_t_import( bms3o_t_image( 400, 300, 'same-name.png' ) );
 $file1  = get_post_meta( $first, '_wp_attached_file', true );

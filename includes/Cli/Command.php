@@ -223,9 +223,10 @@ final class Command {
 			'error'   => 0,
 		);
 		$after    = 0;
+		$per_page = 200;
 
 		do {
-			$page = $items->page( $after, 200 );
+			$page = $items->page( $after, $per_page );
 			foreach ( $page as $item ) {
 				$after  = $item['id'];
 				$result = $this->plugin->offloader->verify( $item, ! empty( $assoc_args['fix'] ) );
@@ -239,7 +240,8 @@ final class Command {
 				}
 				$progress->tick();
 			}
-		} while ( count( $page ) === 200 );
+			$fetched = count( $page );
+		} while ( $fetched === $per_page );
 		$progress->finish();
 
 		$summary = sprintf( '%d ok, %d fixed, %d missing, %d errors.', $counts['ok'], $counts['fixed'], $counts['missing'], $counts['error'] );

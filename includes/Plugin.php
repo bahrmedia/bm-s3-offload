@@ -166,5 +166,6 @@ final class Plugin {
 	public static function deactivate() {
 		wp_clear_scheduled_hook( self::CRON_HOOK );
 		wp_clear_scheduled_hook( Background::HOOK );
+		wp_unschedule_hook( Attachments::ASYNC_HOOK );
 	}
 }

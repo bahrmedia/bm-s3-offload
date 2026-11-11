@@ -1,8 +1,8 @@
 <?php
 /**
- * Router for PHP's built-in web server (pretty permalinks):
+ * Router for PHP's built-in web server (pretty permalinks).
  *
- *     php -S localhost:8080 -t /path/to/wordpress tests/integration/router.php
+ * Usage: php -S localhost:8080 -t /path/to/wordpress tests/integration/router.php
  *
  * @package BahrMedia\S3Offload
  */

@@ -13,10 +13,10 @@ Offload the WordPress media library to **any S3-compatible object storage** – 
 We analysed the popular offload plugins (WP Offload Media Lite, Media Cloud, Advanced Media Offloader, WP-Stateless, Infinite Uploads, Media Cloud Sync, Offload Media – Cloud Storage). All of them
 
 - ship a complete vendor SDK (6–57 MB),
-- put essential features behind a paid plan (bulk migration of existing media, private files / signed URLs, WP-CLI, BuddyBoss support),
+- put essential features behind a paid plan (bulk migration of existing media, private files / signed URLs, WP-CLI, BuddyBoss and WooCommerce support, asset CDN, background processing),
 - and none of them protects BuddyBoss media according to BuddyBoss' privacy settings.
 
-BM S3 Offload does all of that for free – the whole plugin including translations is smaller than 350 KB.
+BM S3 Offload does all of that for free – the whole plugin including translations is smaller than 400 KB, and every feature is covered by end-to-end tests against a real S3 server.
 
 | | BM S3 Offload | typical competitor (free) |
 |---|---|---|
@@ -24,13 +24,21 @@ BM S3 Offload does all of that for free – the whole plugin including translati
 | Migrate existing media (bulk) | ✔ browser + WP-CLI | often Pro |
 | Remove local copies | ✔ | ✔ |
 | Private files / signed URLs | ✔ | often Pro |
+| Make single files private / public | ✔ | Pro |
 | WP-CLI | ✔ | often Pro |
+| Bulk operations in the background (no open browser) | ✔ | Pro or missing |
+| WooCommerce downloads from the bucket | ✔ signed redirect | Pro |
+| CDN for CSS / JavaScript ("assets pull") | ✔ | Pro |
+| WebP / AVIF copies of image optimisers | ✔ | Pro |
+| Media library filter by storage state | ✔ | Pro or missing |
+| Verify & repair bucket contents | ✔ | missing |
 | Any S3-compatible provider | ✔ | often fixed list |
 | BuddyBoss photos, documents, videos | ✔ privacy-aware | Pro or missing |
 | BuddyBoss avatars & cover images | ✔ | Pro or missing |
 | Multipart upload for large files | ✔ streamed | often missing |
 | Credentials encrypted / via wp-config | ✔ | plain text |
 | Dependencies | none | vendor SDK |
+| Automated end-to-end tests | ✔ WordPress + S3 + BuddyBoss + WooCommerce | – |
 
 ## Features
 
@@ -38,10 +46,18 @@ BM S3 Offload does all of that for free – the whole plugin including translati
 - **Automatic offload** of new uploads: original, every image size, the unscaled original (`-scaled` images) and image-editor backups.
 - **Remove local copies** (optional). Files are restored on demand when WordPress needs them (image editor, `wp media regenerate`, BuddyBoss thumbnail regeneration) and removed again afterwards.
 - **Delivery** from the bucket or a CDN / custom domain. URLs in post content are rewritten on output – the database keeps local URLs, so you are never locked in.
-- **Private files** with pre-signed URLs (AWS Signature V4). Signed URLs are stable for half of their lifetime, so browsers can cache them. Signed URLs for private files are only generated in access-checked code paths (BuddyBoss' checks) and for administrators – never by generic filters such as post content or attachment URLs requested by anyone.
-- **Bulk tools** in the admin (batched, stoppable, resumable) and **WP-CLI** for huge libraries.
+- **Private files** with pre-signed URLs (AWS Signature V4). Signed URLs are stable for half of their lifetime, so browsers can cache them.
+  - *Private* media (marked in the media library): delivered to everybody, but only with expiring signed URLs – hotlink protection, links stop working after the lifetime.
+  - *Restricted* media (BuddyBoss photos/documents/videos, WooCommerce and Easy Digital Downloads product files): signed URLs only after the owning plugin has checked the access – never by generic filters such as post content.
+- **Make media private or public** per file or in bulk – objects are moved inside the bucket (server-side copy, no re-upload).
+- **Bulk tools** in the admin – in the browser or **in the background via WP-Cron** (close the page and come back later) – and **WP-CLI** for huge libraries.
+- **WooCommerce**: downloadable products are delivered from the bucket. WooCommerce checks the order, then the customer is redirected to a short-lived signed URL – downloads never pass through your server.
+- **CDN for scripts and styles**: rewrite theme, plugin and core assets to a pull CDN (front end only).
+- **WebP/AVIF copies** created by image optimisers (`photo.jpg.webp`, EWWW, WebP Express) are offloaded, rewritten and removed together with the image.
+- **Page builders**: Elementor output is rewritten like post content.
+- **Verify** (`wp bm-s3 verify --fix`): checks that every offloaded file exists in the bucket and repairs missing objects from local copies.
 - **Leave the bucket**: move everything back to the server with one click.
-- **Media library**: status column, row actions and bulk actions (offload, remove local copy, restore, remove from bucket).
+- **Media library**: status column, filter by storage state, row actions and bulk actions (offload, remove local copy, restore, make private/public, remove from bucket).
 - **Safe by design**: local files are only deleted after a successful upload (and never after a fatal error), bulk removal verifies each object first, file names stay unique even when the colliding file only exists in the bucket, editors never save bucket URLs into posts, a broken configuration falls back to local URLs instead of breaking the site, and prefixes that would expose private files are rejected.
 - **Configuration via wp-config.php or environment variables** for every setting.
 - **Multisite** compatible: one table per site, sub-site keys mirror WordPress' layout (`…/uploads/sites/2/…`) so sites can share a bucket, settings are reserved to super admins.
@@ -60,6 +76,13 @@ Tested with BuddyBoss Platform 3.7.1.
 | Thumbnail regeneration | Originals are restored temporarily and the new sizes are offloaded. |
 
 BuddyBoss' symlink option is disabled automatically while media are offloaded, and its "direct access" check in the media settings knows about the offload.
+
+### WooCommerce and Easy Digital Downloads
+
+| What | How |
+|---|---|
+| WooCommerce product files (`woocommerce_uploads/`) | Restricted private objects. After WooCommerce has validated the order, download limit and expiry, the customer is redirected to a signed URL (valid for 10 minutes, `Content-Disposition: attachment`). |
+| Easy Digital Downloads files (`edd/`) | Stored as restricted private objects (backup); local copies are always kept, EDD serves them as usual. |
 
 ## Requirements
 
@@ -135,6 +158,8 @@ define( 'BMS3O_REMOVE_LOCAL', true );
 | `bb_private` | `true` | Store BuddyBoss media (`bb_medias/`, `bb_documents/`, `bb_videos/`) as private objects – also when the integration is switched off |
 | `bb_delivery` | `proxy` | `proxy` (BuddyBoss preview URL + access check) or `direct` (signed URL in the page) |
 | `bb_avatars` | `true` | Mirror avatars and cover images |
+| `wc_enabled` | `true` | Deliver WooCommerce downloads from the bucket |
+| `assets_domain` | `''` | Pull CDN for scripts and styles (origin = this site) |
 | `remove_data` | `false` | Delete settings and table on uninstall |
 
 ## WP-CLI
@@ -148,6 +173,10 @@ wp bm-s3 remove-local --all          # verifies every object before deleting
 wp bm-s3 download --all              # restore local copies
 wp bm-s3 unoffload --all --yes       # move everything back and empty the bucket
 wp bm-s3 bb-sync                     # mirror existing BuddyBoss avatars and covers
+wp bm-s3 privacy 12 34 --private     # expiring signed URLs (or --public)
+wp bm-s3 verify [--fix]              # check that every object exists, repair from local copies
+wp bm-s3 background start offload --remove-local   # run in the background (WP-Cron)
+wp bm-s3 background status|stop
 ```
 
 ## How it works
@@ -173,7 +202,9 @@ output → wp_get_attachment_url / image_downsize / srcset / content filters
 | `bms3o_should_offload_attachment` | filter | Skip automatic offload for an attachment |
 | `bms3o_attachment_paths` | filter | Files that belong to an attachment |
 | `bms3o_attachment_is_private` | filter | Store an attachment as private object |
-| `bms3o_can_access_private` | filter | Allow signed URLs for private files outside access-checked contexts (default: administrators) |
+| `bms3o_can_access_private` | filter | Allow signed URLs for restricted files outside access-checked contexts (default: administrators) |
+| `bms3o_private_is_restricted` | filter | Whether a private file needs an access check (default: protected directories) |
+| `bms3o_can_remove_local` | filter | Whether the local copies of an attachment may be removed |
 | `bms3o_object_key` | filter | Object key of a file |
 | `bms3o_upload_headers` | filter | Headers sent with an upload |
 | `bms3o_public_url` / `bms3o_signed_url` | filter | Delivery URLs |
@@ -184,7 +215,11 @@ output → wp_get_attachment_url / image_downsize / srcset / content filters
 
 ## Development
 
-A local test environment needs WordPress, BuddyBoss Platform (optional) and an S3 server such as MinIO. The GitHub workflow lints the code with PHP 7.4–8.4 and checks it against the WordPress Coding Standards and PHPCompatibility.
+Every push runs in GitHub Actions:
+
+- `php -l` on PHP 7.4 – 8.4
+- WordPress Coding Standards and PHPCompatibility
+- **End-to-end tests** (`tests/integration/`) against real WordPress installations (6.2 / PHP 7.4 and latest / PHP 8.3 with BuddyBoss Platform and WooCommerce) and a real S3 server (MinIO): S3 client, media lifecycle, privacy, BuddyBoss privacy matrix, WooCommerce orders, bulk and background operations. See [tests/integration/README.md](tests/integration/README.md).
 
 ## License
 

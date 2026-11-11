@@ -25,6 +25,7 @@ function bms3o_uninstall_site() {
 
 	wp_clear_scheduled_hook( 'bms3o_cron' );
 	wp_clear_scheduled_hook( 'bms3o_background_run' );
+	wp_unschedule_hook( 'bms3o_offload_attachment' );
 
 	if ( ! $remove ) {
 		return;
