@@ -21,7 +21,7 @@ In November 2026 we analysed the free versions of seven popular offload plugins.
 | Infinite Uploads 3.5.2 | ✔ (within the quota) | – | ✔ | own cloud service only | avatars/covers stay local | AWS, 54 MB |
 | Media Cloud Sync 1.5.0 | ✔ (cron; browser paid) | paid | basic | ✔ | paid | AWS + GCS, 20 MB |
 | Offload Media – Cloud Storage 1.9.0 | paid | ✔ | – | AWS/GCS/DO/R2 (others paid) | – | AWS + GCS, 57 MB |
-| **BM S3 Offload** | ✔ browser, background, WP-CLI | ✔ | ✔ | ✔ | ✔ with BuddyBoss' access checks | none (< 400 KB in total) |
+| **BM S3 Offload** | ✔ browser, background, WP-CLI | ✔ | ✔ | ✔ | ✔ with BuddyBoss' access checks | none (< 500 KB in total) |
 
 Versions as analysed on 2026-11-11 from their source code (ZIPs from wordpress.org); SDK sizes are the size of the bundled SDK directory on disk after unpacking (`du -sh` of the vendor/SDK folder). Plans and features of other plugins change – check their current documentation.
 
