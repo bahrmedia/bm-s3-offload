@@ -125,6 +125,8 @@ final class SettingsPage {
 					'stopped'   => __( 'Stopped.', 'bm-s3-offload' ),
 					'stop'      => __( 'Stop', 'bm-s3-offload' ),
 					'failed'    => __( 'Request failed:', 'bm-s3-offload' ),
+					/* translators: %d: seconds */
+					'retrying'  => __( 'Request failed, retrying in %d s …', 'bm-s3-offload' ),
 					'processed' => __( 'Processed', 'bm-s3-offload' ),
 					'errors'    => __( 'Errors', 'bm-s3-offload' ),
 					'confirm'   => __( 'This moves all files back to this server and deletes them from the bucket. Continue?', 'bm-s3-offload' ),
@@ -613,14 +615,71 @@ final class SettingsPage {
 		// phpcs:enable
 
 		/**
-		 * Filters the number of items processed per AJAX request.
+		 * Filters the number of items fetched per batch within an AJAX request.
 		 *
 		 * @param int    $size      Batch size.
 		 * @param string $operation Operation.
 		 */
 		$size = (int) apply_filters( 'bms3o_bulk_batch_size', 'bb_sync' === $operation ? 20 : 10, $operation );
 
-		wp_send_json_success( $this->plugin->bulk->run( $operation, $cursor, $size, $options ) );
+		/**
+		 * Filters the time budget of an AJAX request in seconds. Batches are processed
+		 * until it is used up (at least one batch per request).
+		 *
+		 * @param int    $seconds   Time budget.
+		 * @param string $operation Operation.
+		 */
+		$budget = (int) apply_filters( 'bms3o_bulk_time_limit', self::bulk_time_limit(), $operation );
+
+		wp_send_json_success( $this->run_bulk( $operation, $cursor, $options, $size, $budget ) );
+	}
+
+	/**
+	 * Processes batches of a bulk operation until it is done or the time
+	 * budget is used up (at least one batch).
+	 *
+	 * @param string $operation Operation.
+	 * @param int    $cursor    Cursor.
+	 * @param array  $options   Options.
+	 * @param int    $size      Items per batch.
+	 * @param int    $budget    Time budget in seconds.
+	 * @return array{cursor:int,processed:int,done:bool,errors:array<int,string>,total?:int}
+	 */
+	public function run_bulk( $operation, $cursor, array $options, $size, $budget ) {
+		$deadline = microtime( true ) + max( 1, (int) $budget );
+		$result   = array(
+			'cursor'    => $cursor,
+			'processed' => 0,
+			'done'      => false,
+			'errors'    => array(),
+		);
+
+		do {
+			$batch = $this->plugin->bulk->run( $operation, $result['cursor'], $size, $options );
+			$this->plugin->offloader->process_removal_queue();
+
+			$result['cursor']     = $batch['cursor'];
+			$result['processed'] += $batch['processed'];
+			$result['done']       = $batch['done'];
+			$result['errors']     = $batch['errors'] + $result['errors'];
+			if ( isset( $batch['total'] ) ) {
+				$result['total'] = $batch['total'];
+			}
+		} while ( ! $result['done'] && microtime( true ) < $deadline );
+
+		return $result;
+	}
+
+	/**
+	 * Default time budget of a bulk AJAX request: 20 seconds, but at most half
+	 * of PHP's max_execution_time (and at least 5 seconds), so that a request
+	 * also finishes the item it is working on when the budget is used up.
+	 *
+	 * @return int Seconds.
+	 */
+	private static function bulk_time_limit() {
+		$max = (int) ini_get( 'max_execution_time' );
+		return $max > 0 ? max( 5, min( 20, (int) floor( $max / 2 ) ) ) : 20;
 	}
 
 	/**

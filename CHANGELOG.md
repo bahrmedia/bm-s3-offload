@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+
+- Bulk operations in the browser process batches until a time budget of 20 seconds per request is used up (at most half of `max_execution_time`) instead of a fixed 10 items, so fewer requests are needed for small files and large files do not run into timeouts. Filter `bms3o_bulk_time_limit`.
+- Failed requests of a bulk operation in the browser (network errors, timeouts, proxy errors) are retried after 3, 10 and 30 seconds instead of stopping the operation. Refusals by the server (permissions, invalid request) still stop it.
+
 ## [1.0.1] – 2026-11-12
 
 ### Fixed

@@ -137,7 +137,39 @@ wp_delete_attachment( $owner, true );
 bms3o_t( null !== $offloader->items()->get( $owner_file . '.webp' ), 'Deleting the first attachment keeps the other one\'s object' );
 wp_delete_attachment( $other, true );
 
-foreach ( array_merge( $ids, array( $sidecar_id ) ) as $id ) {
+bms3o_t_section( 'Browser requests with a time budget' );
+
+bms3o_t_settings( array( 'copy_on_upload' => false ) );
+$budget_ids = array();
+for ( $i = 0; $i < 3; $i++ ) {
+	$budget_ids[] = bms3o_t_import( bms3o_t_image( 200, 150, "budget-{$i}.png" ) );
+}
+bms3o_t_settings( array( 'copy_on_upload' => true ) );
+$page  = new BahrMedia\S3Offload\Admin\SettingsPage( $plugin );
+$start = min( $budget_ids ) - 1;
+
+// Uploading the first attachment takes longer than the budget of one second.
+$slow = static function ( $path, $key, $source_type, $source_id ) use ( $budget_ids ) {
+	static $seen = array();
+	if ( $source_id === $budget_ids[0] && ! isset( $seen[ $source_id ] ) ) {
+		$seen[ $source_id ] = true;
+		usleep( 1200000 );
+	}
+};
+add_action( 'bms3o_uploaded', $slow, 10, 4 );
+$result = $page->run_bulk( 'offload', $start, array(), 1, 1 );
+remove_action( 'bms3o_uploaded', $slow, 10 );
+bms3o_t( 1 === $result['processed'] && ! $result['done'] && $result['cursor'] === $budget_ids[0], 'The request ends after the budget, the next one continues at the cursor', $result );
+
+$result = $page->run_bulk( 'offload', $result['cursor'], array(), 1, 30 );
+bms3o_t( 2 === $result['processed'] && $result['done'], 'Within the budget, several batches are processed in one request', $result );
+$ok = true;
+foreach ( $budget_ids as $id ) {
+	$ok = $ok && null !== $media->main_item( $id );
+}
+bms3o_t( $ok, 'All attachments are offloaded' );
+
+foreach ( array_merge( $ids, $budget_ids, array( $sidecar_id ) ) as $id ) {
 	wp_delete_attachment( $id, true );
 }
 bms3o_t( null === $offloader->items()->get( $main . '.webp' ), 'Sidecar objects are deleted with the attachment' );

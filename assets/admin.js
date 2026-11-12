@@ -25,9 +25,17 @@
 		} );
 
 		return window.fetch( config.ajaxUrl, { method: 'POST', credentials: 'same-origin', body: body } )
+			.catch( function ( error ) {
+				// Network error: worth retrying.
+				error.retryable = true;
+				throw error;
+			} )
 			.then( function ( response ) {
 				return response.json().catch( function () {
-					throw new Error( 'HTTP ' + response.status );
+					// No JSON (e.g. timeout or 502 from a proxy): worth retrying.
+					var error = new Error( 'HTTP ' + response.status );
+					error.retryable = true;
+					throw error;
 				} );
 			} )
 			.then( function ( json ) {
@@ -142,7 +150,11 @@
 			status.textContent += ' ' + message;
 		}
 
-		function step( cursor ) {
+		// Delays (seconds) before retrying a failed request; then the operation stops.
+		var retryDelays = [ 3, 10, 30 ];
+
+		function step( cursor, attempt ) {
+			attempt = attempt || 0;
 			if ( ! running ) {
 				finish( config.i18n.stopped );
 				return;
@@ -172,7 +184,17 @@
 					}
 				} )
 				.catch( function ( error ) {
-					finish( config.i18n.failed + ' ' + error.message );
+					// Server-side refusals (permissions, invalid request) are not retried.
+					if ( ! error.retryable || attempt >= retryDelays.length || ! running ) {
+						update();
+						finish( config.i18n.failed + ' ' + error.message );
+						return;
+					}
+					update();
+					status.textContent += ' · ' + config.i18n.retrying.replace( '%d', retryDelays[ attempt ] );
+					window.setTimeout( function () {
+						step( cursor, attempt + 1 );
+					}, retryDelays[ attempt ] * 1000 );
 				} );
 		}
 
