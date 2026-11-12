@@ -1,6 +1,6 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: BM S3 Offload 1.0.8\n"
+"Project-Id-Version: BM S3 Offload 1.0.9\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/bm-s3-offload\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -594,54 +594,54 @@ msgstr "Fehler beim Synchronisieren von %s"
 msgid "Files in protected directories (BuddyBoss, WooCommerce, Easy Digital Downloads) cannot be made public."
 msgstr "Dateien in geschützten Verzeichnissen (BuddyBoss, WooCommerce, Easy Digital Downloads) können nicht öffentlich gemacht werden."
 
-#: includes/Offloader.php:1537
-#: includes/Offloader.php:1544
+#: includes/Offloader.php:1565
+#: includes/Offloader.php:1572
 msgid "Configuration"
 msgstr "Konfiguration"
 
-#: includes/Offloader.php:1537
+#: includes/Offloader.php:1565
 msgid "Endpoint, bucket, access key and secret key are required."
 msgstr "Endpoint, Bucket, Access Key und Secret Key sind erforderlich."
 
-#: includes/Offloader.php:1556
-#: includes/Offloader.php:1558
+#: includes/Offloader.php:1584
+#: includes/Offloader.php:1586
 msgid "Upload"
 msgstr "Upload"
 
-#: includes/Offloader.php:1564
-#: includes/Offloader.php:1566
+#: includes/Offloader.php:1592
+#: includes/Offloader.php:1594
 msgid "Download"
 msgstr "Download"
 
-#: includes/Offloader.php:1564
+#: includes/Offloader.php:1592
 msgid "Content mismatch."
 msgstr "Inhalt stimmt nicht überein."
 
-#: includes/Offloader.php:1580
+#: includes/Offloader.php:1608
 msgid "Public delivery"
 msgstr "Öffentliche Auslieferung"
 
 #. translators: 1: HTTP status, 2: URL
-#: includes/Offloader.php:1584
+#: includes/Offloader.php:1612
 #, php-format
 msgid "HTTP %1$s for %2$s – make the object prefix publicly readable (bucket policy) or enable signed URLs for all files."
 msgstr "HTTP %1$s für %2$s – das Objekt-Präfix öffentlich lesbar machen (Bucket-Policy) oder signierte URLs für alle Dateien aktivieren."
 
-#: includes/Offloader.php:1594
+#: includes/Offloader.php:1622
 msgid "Private objects are protected"
 msgstr "Private Objekte sind geschützt"
 
 #. translators: %s: HTTP status
-#: includes/Offloader.php:1598
+#: includes/Offloader.php:1626
 #, php-format
 msgid "Anonymous request returned HTTP %s. Private files are publicly readable – restrict the bucket policy to the public prefix."
 msgstr "Ein anonymer Abruf lieferte HTTP %s. Private Dateien sind öffentlich lesbar – die Bucket-Policy auf das öffentliche Präfix beschränken."
 
-#: includes/Offloader.php:1612
+#: includes/Offloader.php:1640
 msgid "Signed URLs"
 msgstr "Signierte URLs"
 
-#: includes/Offloader.php:1615
+#: includes/Offloader.php:1643
 msgid "Delete"
 msgstr "Löschen"
 

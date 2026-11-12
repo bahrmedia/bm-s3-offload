@@ -26,6 +26,22 @@ bms3o_t_settings(
 	)
 );
 
+bms3o_t_section( 'Versioned URLs' );
+
+$id   = bms3o_t_import( bms3o_t_image( 120, 90, 'versioned.png' ) );
+$url  = wp_get_attachment_url( $id );
+$file = get_post_meta( $id, '_wp_attached_file', true );
+bms3o_t( 1 === preg_match( '/\?v=[0-9a-z]+$/', $url ) && 200 === bms3o_t_status( $url ), 'Public bucket URLs carry a version and work', $url );
+$local = ( new BahrMedia\S3Offload\Media\ContentRewriter( $offloader ) )->localize( '<img src="' . $url . '">' );
+bms3o_t( '<img src="' . $offloader->uploads()['baseurl'] . '/' . $file . '">' === $local, 'Editors store the local URL without the version', $local );
+$none = static function () {
+	return '';
+};
+add_filter( 'bms3o_url_version', $none );
+bms3o_t( false === strpos( wp_get_attachment_url( $id ), '?' ), 'The filter bms3o_url_version can omit it' );
+remove_filter( 'bms3o_url_version', $none );
+wp_delete_attachment( $id, true );
+
 bms3o_t_section( 'Upload' );
 
 $name      = 'bms3o-' . wp_generate_password( 6, false, false ) . '.jpg';

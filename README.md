@@ -36,6 +36,7 @@ BM S3 Offload is free without a Pro version, ships its own small S3 client inste
 - **Private files** with pre-signed URLs (AWS Signature V4). Signed URLs are stable for half of their lifetime, so browsers can cache them.
   - *Private* media (marked in the media library): delivered to everybody, but only with expiring signed URLs – hotlink protection, links stop working after the lifetime.
   - When files become private, copies already cached by a CDN stay reachable until their `max-age` expires – purge the CDN if needed.
+  - Public URLs carry a version (`?v=…`, from size and modification time of the file). A file replaced under the same name (e.g. with Enable Media Replace) gets a new URL, so browsers and CDNs load the new file despite the long `max-age`. CDNs configured to ignore query strings need a purge instead.
   - *Restricted* media (BuddyBoss photos/documents/videos, WooCommerce and Easy Digital Downloads product files): signed URLs only after the owning plugin has checked the access – never by generic filters such as post content.
 - **Make media private or public** per file or in bulk – objects are moved inside the bucket (server-side copy, no re-upload).
 - **Bulk tools** in the admin – in the browser or **in the background via WP-Cron** (close the page and come back later) – and **WP-CLI** for huge libraries.
@@ -231,6 +232,7 @@ output → wp_get_attachment_url / image_downsize / srcset / content filters
 | `bms3o_count_cache_ttl` | filter | Lifetime of the cached counters of the tools tab in seconds (default 300, 0 disables the cache) |
 | `bms3o_file_lock_wait` | filter | Seconds an operation waits for another operation on the same file (default 10) |
 | `bms3o_object_lock_wait` | filter | Seconds an upload or privacy change waits for the cleanup of the same object (default 10) |
+| `bms3o_url_version` | filter | Version appended to public URLs (`?v=…`); return `''` to omit it |
 | `bms3o_urls_changed` | action | After URLs of files changed (object moved or deleted, or settings saved; empty list = all) |
 | `bms3o_storage_changed` | action | After a confirmed change of storage (previous and new storage identity) |
 

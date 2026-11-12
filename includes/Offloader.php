@@ -387,8 +387,8 @@ final class Offloader {
 				}
 
 				$result['uploaded'][] = $path;
-				if ( $item && ( $item['bucket'] !== $bucket || $item['object_key'] !== $key ) ) {
-					self::urls_changed( array( $path ) );
+				if ( $item ) {
+					self::urls_changed( array( $path ) ); // New key, or a new version of the URL.
 				}
 
 				/**
@@ -1410,6 +1410,11 @@ final class Offloader {
 			return ''; // Invalid endpoint: keep local URLs instead of breaking the page.
 		}
 
+		$version = self::url_version( $item );
+		if ( '' !== $version ) {
+			$url .= ( false === strpos( $url, '?' ) ? '?' : '&' ) . 'v=' . rawurlencode( $version );
+		}
+
 		/**
 		 * Filters the public URL of an offloaded file.
 		 *
@@ -1417,6 +1422,29 @@ final class Offloader {
 		 * @param array  $item Item row.
 		 */
 		return (string) apply_filters( 'bms3o_public_url', $url, $item );
+	}
+
+	/**
+	 * Version of a public URL. Objects are cached for a long time (Cache-Control),
+	 * so a file replaced under the same name (e.g. with Enable Media Replace) gets
+	 * a new URL; browsers and CDNs that key their cache by the full URL then load
+	 * the new file. Derived from size and modification time of the uploaded file.
+	 *
+	 * @param array $item Item row.
+	 * @return string '' for no version.
+	 */
+	private static function url_version( array $item ) {
+		$size  = isset( $item['filesize'] ) ? (int) $item['filesize'] : 0;
+		$mtime = isset( $item['local_mtime'] ) ? (int) $item['local_mtime'] : 0;
+		$value = 0 === $size && 0 === $mtime ? '' : base_convert( (string) $mtime, 10, 36 ) . base_convert( (string) $size, 10, 36 );
+
+		/**
+		 * Filters the version appended to public URLs ("?v=…"); return '' to omit it.
+		 *
+		 * @param string $value Version.
+		 * @param array  $item  Item row.
+		 */
+		return (string) apply_filters( 'bms3o_url_version', $value, $item );
 	}
 
 	/**

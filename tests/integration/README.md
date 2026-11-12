@@ -8,7 +8,7 @@ Platform and WooCommerce, MinIO as S3 server.
 | File | Covers |
 |---|---|
 | `01-client.php` | S3 client: signing, special characters, multipart, copy, list, batch delete, presigning, errors |
-| `02-attachments.php` | Upload, sizes, URLs, srcset, content rewriting, no lock-in on save, remove local, image editor and regeneration without local files, unique names, restore, delete |
+| `02-attachments.php` | Versioned URLs, upload, sizes, URLs, srcset, content rewriting, no lock-in on save, remove local, image editor and regeneration without local files, unique names, restore, delete |
 | `03-privacy-safety.php` | Private media, restricted directories, invalid configuration, prefix validation, secret encryption |
 | `04-bulk.php` | Bulk operations, background runner, verify, WebP/AVIF sidecars |
 | `05-buddyboss.php` | BuddyBoss privacy (only me, public, private groups), e-mail links, direct mode, avatars, cover images |

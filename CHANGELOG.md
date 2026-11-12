@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.0.9] – 2026-11-12
+
+### Fixed
+
+- A file replaced under the same name (e.g. with Enable Media Replace) kept its URL; with the default `Cache-Control: public, max-age=31536000`, browsers and CDNs could show the old file for up to a year. Public URLs now carry a version (`?v=…`, from size and modification time of the uploaded file), so they change with the file. Filter `bms3o_url_version` (return `''` to omit it). Signed URLs are unchanged. Editors still store local URLs without the version.
+- A re-upload under the same key now also fires `bms3o_urls_changed` (the URL version changes), so Elementor regenerates its CSS.
+
 ## [1.0.8] – 2026-11-12
 
 ### Fixed

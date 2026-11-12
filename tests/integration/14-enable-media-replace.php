@@ -48,6 +48,7 @@ foreach ( $cases as $case ) {
 	$name    = 'emr-' . wp_generate_password( 6, false, false );
 
 	$id        = bms3o_t_import( bms3o_t_image( 1200, 800, $name . '.png' ) );
+	$old_url   = wp_get_attachment_url( $id );
 	$old_paths = $media->paths( $id );
 	$old_keys  = wp_list_pluck( $offloader->items()->get_many( $old_paths ), 'object_key' );
 	$file      = get_post_meta( $id, '_wp_attached_file', true );
@@ -90,6 +91,7 @@ foreach ( $cases as $case ) {
 	bms3o_t( empty( $stale ) && empty( $left ), "{$label}: objects and items of old files are deleted", array( $stale, $left ) );
 	bms3o_t( 0 !== strpos( wp_get_attachment_url( $id ), home_url() ) && 200 === bms3o_t_status( wp_get_attachment_url( $id ) ), "{$label}: the attachment is served from the bucket", wp_get_attachment_url( $id ) );
 	bms3o_t( ! in_array( $id, $media->pending_retries(), true ), "{$label}: no upload error" );
+	bms3o_t( wp_get_attachment_url( $id ) !== $old_url, "{$label}: the URL changes, so caches load the new file", array( $old_url, wp_get_attachment_url( $id ) ) );
 
 	clean_post_cache( $post );
 	$content = get_post_field( 'post_content', $post );
