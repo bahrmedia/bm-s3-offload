@@ -120,7 +120,7 @@ $result = $offloader->verify( $offloader->items()->get( $file ) );
 bms3o_t( 0 === strpos( $result, 'size mismatch' ), 'verify reports the size mismatch', $result );
 $result = $offloader->verify( $offloader->items()->get( $file ), true );
 $head   = $settings->client()->head( $public );
-bms3o_t( 'fixed' === $result && (int) $head['content-length'] === filesize( $local ), 'verify --fix uploads the file again', $result );
+bms3o_t( 'fixed' === $result && filesize( $local ) === (int) $head['content-length'], 'verify --fix uploads the file again', $result );
 $removed = $offloader->remove_local( array( $file ), true );
 bms3o_t( array( $file ) === $removed, 'Afterwards the local copy can be removed' );
 $offloader->download( array( $file ) );
@@ -154,7 +154,15 @@ bms3o_t( '' === $settings->storage_error(), 'Back to normal with the original en
 
 $errors = $settings->save( array_merge( $input, array( 'storage_moved' => '1' ) ) );
 bms3o_t( empty( $errors ) && $settings->get( 'endpoint' ) === $other && '' === $settings->storage_error(), 'A confirmed change is accepted', $errors );
-$settings->save( array_merge( $input, array( 'endpoint' => $endpoint, 'storage_moved' => '1' ) ) );
+$settings->save(
+	array_merge(
+		$input,
+		array(
+			'endpoint'      => $endpoint,
+			'storage_moved' => '1',
+		)
+	)
+);
 bms3o_t( $settings->get( 'endpoint' ) === $endpoint && '' === $settings->storage_error(), 'Changed back (confirmed)' );
 
 bms3o_t_section( 'Failed deletion of a deleted attachment' );
@@ -230,7 +238,7 @@ $body   = str_repeat( wp_generate_password( 64, true, true ), 196608 ); // 12 Mi
 $large->put_string( $source, $body );
 $large->copy( $source, $target, array( 'Content-Type' => 'application/octet-stream' ), strlen( $body ) );
 $head = $large->head( $target );
-bms3o_t( (int) $head['content-length'] === strlen( $body ) && md5( $large->get_string( $target ) ) === md5( $body ), 'Multipart copy of a large object (3 parts)' );
+bms3o_t( strlen( $body ) === (int) $head['content-length'] && md5( $large->get_string( $target ) ) === md5( $body ), 'Multipart copy of a large object (3 parts)' );
 $large->delete_many( array( $source, $target ) );
 
 bms3o_t_section( 'Uninstall keeps the mapping of files that exist only in the bucket' );

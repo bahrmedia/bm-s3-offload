@@ -277,7 +277,7 @@ final class Settings {
 			return '';
 		}
 		$scheme = isset( $parts['scheme'] ) && 'http' === strtolower( $parts['scheme'] ) ? 'http' : 'https';
-		$port   = isset( $parts['port'] ) && (int) $parts['port'] !== ( 'http' === $scheme ? 80 : 443 ) ? ':' . (int) $parts['port'] : '';
+		$port   = isset( $parts['port'] ) && ( 'http' === $scheme ? 80 : 443 ) !== (int) $parts['port'] ? ':' . (int) $parts['port'] : '';
 		return $scheme . '://' . strtolower( $parts['host'] ) . $port;
 	}
 

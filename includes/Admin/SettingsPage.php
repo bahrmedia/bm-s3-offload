@@ -208,17 +208,7 @@ final class SettingsPage {
 						'description' => __( 'Without bucket name. Replace placeholders like {account} with your values.', 'bm-s3-offload' ),
 					)
 				);
-				if ( $this->plugin->offloader->items()->count() > 0 ) {
-					?>
-					<tr>
-						<th scope="row"><?php esc_html_e( 'Change of storage', 'bm-s3-offload' ); ?></th>
-						<td>
-							<label><input type="checkbox" id="bms3o-storage-moved" name="bms3o[storage_moved]" value="1"> <?php esc_html_e( 'All objects have been copied to the new endpoint (e.g. with rclone).', 'bm-s3-offload' ); ?></label>
-							<p class="description"><?php esc_html_e( 'Files are offloaded to the current endpoint. A new endpoint is only accepted with this confirmation. Afterwards check the new storage with "wp bm-s3 verify".', 'bm-s3-offload' ); ?></p>
-						</td>
-					</tr>
-					<?php
-				}
+				$this->render_storage_moved();
 				$this->field( 'region', __( 'Region', 'bm-s3-offload' ), 'text', array( 'placeholder' => 'eu-central-1' ) );
 				$this->field( 'bucket', __( 'Bucket', 'bm-s3-offload' ), 'text' );
 				$this->field( 'access_key', __( 'Access key ID', 'bm-s3-offload' ), 'text', array( 'autocomplete' => 'off' ) );
@@ -397,6 +387,26 @@ final class SettingsPage {
 					echo '<p class="description">' . esc_html( $args['description'] ) . '</p>';
 				}
 				?>
+			</td>
+		</tr>
+		<?php
+	}
+
+	/**
+	 * Confirmation of a storage change (only shown while files are offloaded).
+	 *
+	 * @return void
+	 */
+	private function render_storage_moved() {
+		if ( 0 === $this->plugin->offloader->items()->count() ) {
+			return;
+		}
+		?>
+		<tr>
+			<th scope="row"><?php esc_html_e( 'Change of storage', 'bm-s3-offload' ); ?></th>
+			<td>
+				<label><input type="checkbox" id="bms3o-storage-moved" name="bms3o[storage_moved]" value="1"> <?php esc_html_e( 'All objects have been copied to the new endpoint (e.g. with rclone).', 'bm-s3-offload' ); ?></label>
+				<p class="description"><?php esc_html_e( 'Files are offloaded to the current endpoint. A new endpoint is only accepted with this confirmation. Afterwards check the new storage with "wp bm-s3 verify".', 'bm-s3-offload' ); ?></p>
 			</td>
 		</tr>
 		<?php
