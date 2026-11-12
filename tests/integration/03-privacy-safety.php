@@ -69,6 +69,30 @@ $html = apply_filters( 'the_content', '<a href="' . $base . '/woocommerce_upload
 bms3o_t( false === strpos( $html, 'X-Amz' ), 'Restricted files: no signed URL in content' );
 $errors = $media->set_privacy( $protected, false );
 bms3o_t( ! empty( $errors ) && $offloader->items()->get( 'woocommerce_uploads/bms3o-test/product.png' )['is_private'], 'Restricted files cannot be made public' );
+$wc_delivery = BahrMedia\S3Offload\Integrations\WooCommerce::is_active() && $plugin->settings->get( 'wc_enabled' );
+bms3o_t( $wc_delivery === $media->can_remove_local( $protected ), 'Shop downloads keep local copies unless the WooCommerce integration delivers them' );
+bms3o_t_settings( array( 'wc_enabled' => false ) );
+bms3o_t( ! $media->can_remove_local( $protected ) && array() === $media->remove_local( $protected ) && is_file( $dir . '/product.png' ), 'WooCommerce integration off: local copy is kept' );
+$bb_photo = wp_insert_attachment(
+	array(
+		'post_title'     => 'bb photo',
+		'post_mime_type' => 'image/png',
+		'post_status'    => 'inherit',
+	)
+);
+update_post_meta( $bb_photo, '_wp_attached_file', 'bb_medias/bms3o-test/photo.png' );
+$bb_delivery = BahrMedia\S3Offload\Integrations\BuddyBoss::is_active() && $plugin->settings->get( 'bb_enabled' );
+bms3o_t( $bb_delivery === $media->can_remove_local( $bb_photo ), 'BuddyBoss media keep local copies unless the BuddyBoss integration delivers them' );
+bms3o_t_settings( array( 'bb_enabled' => false ) );
+bms3o_t( ! $media->can_remove_local( $bb_photo ), 'BuddyBoss integration off: local copies are kept' );
+wp_delete_attachment( $bb_photo, true );
+bms3o_t_settings(
+	array(
+		'wc_enabled' => true,
+		'bb_enabled' => true,
+	)
+);
+
 $signed = $offloader->with_private_access(
 	static function () use ( $offloader, $pitem ) {
 		return $offloader->url( $pitem );

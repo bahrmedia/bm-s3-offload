@@ -84,6 +84,7 @@ s3:PutObject, s3:GetObject, s3:DeleteObject, s3:ListBucket and the multipart upl
 * Fixed: when making files private, a public copy that could not be deleted stayed reachable without notice; it is now reported and removed by an hourly cleanup.
 * Fixed: changing the endpoint while files are offloaded required no confirmation and could treat objects as present on the new storage.
 * Fixed: failed database writes and failed deletions of deleted media were not handled.
+* Fixed: local copies of WooCommerce downloads and BuddyBoss media could be removed while the integration was switched off.
 * Local copies are only removed when the object in the bucket has the same size.
 * Secrets are never stored in plain text when encryption fails.
 * Retries for network errors, throttling and temporary server errors; multipart copy above 5 GiB.

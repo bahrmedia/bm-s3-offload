@@ -11,6 +11,7 @@ All notable changes to this project are documented in this file. The format foll
 - Changing the endpoint while files are offloaded is only accepted with the confirmation that all objects have been copied. If the endpoint is changed by constant or environment variable, all bucket operations (uploads, deletions, removal of local copies, privacy changes) are paused until `wp bm-s3 storage confirm`.
 - Failed database writes are detected: objects are only deleted after the new state has been recorded.
 - Objects of deleted media whose deletion failed are no longer forgotten but retried by the hourly cleanup.
+- Local copies of WooCommerce downloads and BuddyBoss media are only removed while the matching integration delivers them from the bucket (previously also with the integration switched off or the plugin inactive, which broke downloads and media).
 
 ### Changed
 

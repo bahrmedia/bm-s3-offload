@@ -14,6 +14,23 @@ use BahrMedia\S3Offload\Plugin;
 
 $GLOBALS['bms3o_t_failures'] = 0;
 $GLOBALS['bms3o_t_count']    = 0;
+$GLOBALS['bms3o_t_tmp_dirs'] = array();
+
+// Temporary test images are removed at the end of every test file, also after failures.
+register_shutdown_function(
+	static function () {
+		foreach ( $GLOBALS['bms3o_t_tmp_dirs'] as $dir ) {
+			foreach ( (array) glob( $dir . '/*' ) as $file ) {
+				if ( is_file( $file ) ) {
+					unlink( $file );
+				}
+			}
+			if ( is_dir( $dir ) ) {
+				rmdir( $dir );
+			}
+		}
+	}
+);
 
 /**
  * Asserts a condition.
@@ -100,6 +117,7 @@ function bms3o_t_image( $width = 800, $height = 600, $name = 'test.png' ) {
 	$dir  = trailingslashit( get_temp_dir() ) . 'bms3o-test-' . wp_generate_password( 6, false );
 	$file = $dir . '/' . $name;
 	wp_mkdir_p( $dir );
+	$GLOBALS['bms3o_t_tmp_dirs'][] = $dir;
 	$image = imagecreatetruecolor( $width, $height );
 	imagefill( $image, 0, 0, imagecolorallocate( $image, wp_rand( 0, 255 ), wp_rand( 0, 255 ), wp_rand( 0, 255 ) ) );
 	imagestring( $image, 5, 10, 10, wp_generate_password( 12, false ), imagecolorallocate( $image, 255, 255, 255 ) );

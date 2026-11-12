@@ -7,6 +7,8 @@
 
 namespace BahrMedia\S3Offload\Media;
 
+use BahrMedia\S3Offload\Integrations\BuddyBoss;
+use BahrMedia\S3Offload\Integrations\WooCommerce;
 use BahrMedia\S3Offload\Offloader;
 use BahrMedia\S3Offload\Store\Items;
 
@@ -418,10 +420,20 @@ final class Attachments {
 			}
 		}
 
+		// Protected files are only delivered from the bucket by the matching integration.
+		// Without it, the owning plugin serves the local file: keep it.
+		$settings = $this->offloader->settings();
+		if ( 0 === strpos( $file, 'woocommerce_uploads/' ) && ! ( WooCommerce::is_active() && $settings->get( 'wc_enabled' ) ) ) {
+			$allowed = false;
+		}
+		if ( preg_match( '#^bb_(medias|documents|videos)/#', $file ) && ! ( BuddyBoss::is_active() && $settings->get( 'bb_enabled' ) ) ) {
+			$allowed = false;
+		}
+
 		/**
 		 * Filters whether the local copies of an attachment may be removed.
 		 *
-		 * @param bool $allowed       Default false for directories of plugins without delivery integration.
+		 * @param bool $allowed       Default false for directories of plugins without (active) delivery integration.
 		 * @param int  $attachment_id Attachment ID.
 		 */
 		return (bool) apply_filters( 'bms3o_can_remove_local', $allowed, $attachment_id );
