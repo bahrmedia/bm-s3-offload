@@ -9,6 +9,7 @@ namespace BahrMedia\S3Offload;
 
 use BahrMedia\S3Offload\S3\S3Exception;
 use BahrMedia\S3Offload\Store\Items;
+use BahrMedia\S3Offload\Store\Orphans;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -17,21 +18,6 @@ defined( 'ABSPATH' ) || exit;
  * uploads base directory and keeps the items table in sync.
  */
 final class Offloader {
-
-	/**
-	 * Objects that still have to be deleted from the bucket (per site).
-	 */
-	const ORPHANS_OPTION = 'bms3o_orphans';
-
-	/**
-	 * Maximum number of tracked orphans.
-	 */
-	const ORPHANS_MAX = 5000;
-
-	/**
-	 * Lock that serialises changes of the orphan queue (option name).
-	 */
-	const ORPHANS_LOCK = 'bms3o_orphans_lock';
 
 	/**
 	 * Orphans that failed this often are reported as failing repeatedly.
@@ -51,6 +37,13 @@ final class Offloader {
 	 * @var Items
 	 */
 	private $items;
+
+	/**
+	 * Queue of objects that still have to be deleted.
+	 *
+	 * @var Orphans
+	 */
+	private $orphans;
 
 	/**
 	 * Paths whose local copies are deleted at the end of the request.
@@ -89,6 +82,7 @@ final class Offloader {
 	public function __construct( Settings $settings, Items $items ) {
 		$this->settings = $settings;
 		$this->items    = $items;
+		$this->orphans  = new Orphans();
 	}
 
 	/**
@@ -289,9 +283,16 @@ final class Offloader {
 				continue;
 			}
 
+			$claim = $this->claim_key( $bucket, $key );
+			if ( '' === $claim ) {
+				$result['errors'][ $path ] = __( 'The object is being cleaned up right now. Please try again.', 'bm-s3-offload' );
+				continue;
+			}
+
 			try {
 				$client->put_file( $key, $file, $this->upload_headers( $path, $is_private ) );
 			} catch ( S3Exception $e ) {
+				$this->release_key( $bucket, $key, $claim );
 				$result['errors'][ $path ] = $e->getMessage();
 				continue;
 			}
@@ -309,6 +310,7 @@ final class Offloader {
 					'local_mtime'   => $mtime,
 				)
 			);
+			$this->release_key( $bucket, $key, $claim );
 			if ( ! $saved ) {
 				// The item still points to the previous object: keep that one. The new object
 				// is only an orphan if it lives under another key.
@@ -604,10 +606,17 @@ final class Offloader {
 				continue;
 			}
 
+			$claim = $this->claim_key( $item['bucket'], $key );
+			if ( '' === $claim ) {
+				$errors[ $path ] = __( 'The object is being cleaned up right now. Please try again.', 'bm-s3-offload' );
+				continue;
+			}
+
 			try {
 				$client = $this->settings->client( $item['bucket'] );
 				$client->copy( $item['object_key'], $key, $this->upload_headers( $path, (bool) $is_private ), (int) $item['filesize'] );
 			} catch ( \Exception $e ) {
+				$this->release_key( $item['bucket'], $key, $claim );
 				$errors[ $path ] = $e->getMessage();
 				continue;
 			}
@@ -615,7 +624,9 @@ final class Offloader {
 			$old_key            = $item['object_key'];
 			$item['object_key'] = $key;
 			$item['is_private'] = (bool) $is_private;
-			if ( ! $this->items->save( $item ) ) {
+			$saved              = $this->items->save( $item );
+			$this->release_key( $item['bucket'], $key, $claim );
+			if ( ! $saved ) {
 				// The item still points to the old object: keep it and drop the copy.
 				if ( $old_key !== $key ) {
 					$this->delete_or_queue( $item['bucket'], $key, $path );
@@ -659,26 +670,7 @@ final class Offloader {
 	 * @return void
 	 */
 	public function queue_orphans( array $objects ) {
-		$storage = $this->current_storage();
-		$locked  = $this->lock_orphans();
-		$orphans = $this->orphans( true );
-		foreach ( $objects as $object ) {
-			$id = md5( $object[0] . '|' . $object[1] );
-			if ( ! isset( $orphans[ $id ] ) && count( $orphans ) >= self::ORPHANS_MAX ) {
-				break;
-			}
-			$orphans[ $id ] = array(
-				'bucket'   => (string) $object[0],
-				'key'      => (string) $object[1],
-				'path'     => (string) $object[2],
-				'storage'  => $storage,
-				'attempts' => isset( $orphans[ $id ] ) ? (int) $orphans[ $id ]['attempts'] : 0,
-			);
-		}
-		update_option( self::ORPHANS_OPTION, $orphans, false );
-		if ( $locked ) {
-			$this->unlock_orphans();
-		}
+		$this->orphans->add( $objects, $this->current_storage() );
 	}
 
 	/**
@@ -690,17 +682,35 @@ final class Offloader {
 	 * @return void
 	 */
 	public function move_orphans( $from, $to ) {
-		$locked  = $this->lock_orphans();
-		$orphans = $this->orphans( true );
-		foreach ( $orphans as $id => $orphan ) {
-			if ( empty( $orphan['storage'] ) || $orphan['storage'] === $from ) {
-				$orphans[ $id ]['storage'] = (string) $to;
-			}
+		$this->orphans->move( (string) $from, (string) $to );
+	}
+
+	/**
+	 * Objects waiting for deletion, in processing order.
+	 *
+	 * @return array<string,array{bucket:string,key:string,path:string,storage:string,attempts:int}>
+	 */
+	public function orphans() {
+		$list = array();
+		foreach ( $this->orphans->all() as $row ) {
+			$list[ $row['object_hash'] ] = array(
+				'bucket'   => (string) $row['bucket'],
+				'key'      => (string) $row['object_key'],
+				'path'     => (string) $row['path'],
+				'storage'  => (string) $row['storage'],
+				'attempts' => (int) $row['attempts'],
+			);
 		}
-		update_option( self::ORPHANS_OPTION, $orphans, false );
-		if ( $locked ) {
-			$this->unlock_orphans();
-		}
+		return $list;
+	}
+
+	/**
+	 * Queue store (for maintenance and tests).
+	 *
+	 * @return Orphans
+	 */
+	public function orphan_store() {
+		return $this->orphans;
 	}
 
 	/**
@@ -709,13 +719,7 @@ final class Offloader {
 	 * @return int
 	 */
 	public function failing_orphans() {
-		$failing = 0;
-		foreach ( $this->orphans() as $orphan ) {
-			if ( (int) $orphan['attempts'] >= self::ORPHANS_FAILING ) {
-				++$failing;
-			}
-		}
-		return $failing;
+		return $this->orphans->count( self::ORPHANS_FAILING );
 	}
 
 	/**
@@ -728,113 +732,123 @@ final class Offloader {
 	}
 
 	/**
-	 * Acquires the orphan queue lock (atomic, see Lock). A lock older than 30
-	 * seconds belongs to a request that died and is taken over. Waits up to
-	 * 5 seconds.
+	 * Name of the lock that serialises the cleanup of an object with operations
+	 * that use its key again.
 	 *
-	 * @return bool Whether the lock was acquired. Callers continue without it
-	 *              rather than losing queue entries.
+	 * @param string $bucket Bucket.
+	 * @param string $key    Object key.
+	 * @return string
 	 */
-	private function lock_orphans() {
-		return Lock::acquire( self::ORPHANS_LOCK, 30, 5 );
+	private static function object_lock( $bucket, $key ) {
+		return 'bms3o_object_lock_' . Orphans::hash( (string) $bucket, (string) $key );
 	}
 
 	/**
-	 * Releases the orphan queue lock.
+	 * Claims a key before an object is written to it. When the key waits for
+	 * deletion in the cleanup queue, the cleanup of that object is locked out
+	 * and the queue entry is removed, so the cleanup can never delete the new
+	 * object.
 	 *
+	 * @param string $bucket Bucket.
+	 * @param string $key    Object key.
+	 * @return string|null Lock token to release afterwards, null if the key is not
+	 *                     queued (nothing to claim), '' if the cleanup is busy with it.
+	 */
+	private function claim_key( $bucket, $key ) {
+		if ( ! $this->orphans->has( $bucket, $key ) ) {
+			return null;
+		}
+
+		/**
+		 * Filters how long an operation waits for the cleanup of the same object (seconds).
+		 *
+		 * @param float $seconds Wait time.
+		 */
+		$token = Lock::acquire( self::object_lock( $bucket, $key ), 120, (float) apply_filters( 'bms3o_object_lock_wait', 10.0 ) );
+		if ( '' !== $token ) {
+			$this->orphans->remove( $bucket, $key );
+		}
+		return $token;
+	}
+
+	/**
+	 * Releases a claim of claim_key().
+	 *
+	 * @param string      $bucket Bucket.
+	 * @param string      $key    Object key.
+	 * @param string|null $token  Token.
 	 * @return void
 	 */
-	private function unlock_orphans() {
-		Lock::release( self::ORPHANS_LOCK );
-	}
-
-	/**
-	 * Objects waiting for deletion, in processing order.
-	 *
-	 * @param bool $fresh Read from the database (bypass the object cache).
-	 * @return array<string,array{bucket:string,key:string,path:string,storage?:string,attempts:int}>
-	 */
-	public function orphans( $fresh = false ) {
-		if ( $fresh ) {
-			wp_cache_delete( self::ORPHANS_OPTION, 'options' );
+	private function release_key( $bucket, $key, $token ) {
+		if ( is_string( $token ) && '' !== $token ) {
+			Lock::release( self::object_lock( $bucket, $key ), $token );
 		}
-		$orphans = get_option( self::ORPHANS_OPTION, array() );
-		return is_array( $orphans ) ? $orphans : array();
 	}
 
 	/**
 	 * Deletes queued orphans (hourly cron). Objects that are in use again
-	 * (e.g. a file was made public again) are never deleted.
+	 * (e.g. a file was made public again) are never deleted: every object is
+	 * locked before it is checked and deleted, and operations that write to a
+	 * queued key take the same lock first.
 	 *
 	 * @param int $limit Maximum number of objects per run.
 	 * @return int Number of objects still waiting.
 	 */
 	public function process_orphans( $limit = 200 ) {
-		$orphans = $this->orphans( true );
-		if ( empty( $orphans ) || '' !== $this->settings->storage_error() || ! $this->settings->is_configured() ) {
-			return count( $orphans );
+		if ( '' !== $this->settings->storage_error() || ! $this->settings->is_configured() ) {
+			return $this->orphans->count();
 		}
 
-		// Only objects of the configured storage (entries of 1.0.1/1.0.2 carry no storage).
-		$storage = $this->current_storage();
-		$batch   = array();
-		foreach ( $orphans as $id => $orphan ) {
-			if ( empty( $orphan['storage'] ) || $orphan['storage'] === $storage ) {
-				$batch[ $id ] = $orphan;
-				if ( count( $batch ) >= max( 1, (int) $limit ) ) {
-					break;
+		// Lock the due objects; objects being written right now are left for the next run.
+		$locked = array();
+		foreach ( $this->orphans->due( $this->current_storage(), $limit ) as $row ) {
+			$token = Lock::acquire( self::object_lock( $row['bucket'], $row['object_key'] ), 120 );
+			if ( '' !== $token ) {
+				$row['token'] = $token;
+				$locked[]     = $row;
+			}
+		}
+
+		try {
+			// Check the current state only now, while the objects are locked.
+			$paths = array_column( $locked, 'path' );
+			$this->items->forget( $paths );
+			$items = $this->items->get_many( $paths );
+
+			$by_bucket = array();
+			foreach ( $locked as $row ) {
+				if ( ! $this->orphans->has( $row['bucket'], $row['object_key'] ) ) {
+					continue; // Claimed by an operation that writes to the key again.
+				}
+				$item = isset( $items[ $row['path'] ] ) ? $items[ $row['path'] ] : null;
+				if ( $item && $item['bucket'] === $row['bucket'] && $item['object_key'] === $row['object_key'] ) {
+					$this->orphans->remove( $row['bucket'], $row['object_key'] ); // Referenced again: never delete.
+					continue;
+				}
+				$by_bucket[ $row['bucket'] ][] = $row['object_key'];
+			}
+
+			foreach ( $by_bucket as $bucket => $keys ) {
+				try {
+					$errors = $this->settings->client( (string) $bucket )->delete_many( $keys );
+				} catch ( \Exception $e ) {
+					$errors = array_fill_keys( $keys, $e->getMessage() );
+				}
+				foreach ( $keys as $key ) {
+					if ( isset( $errors[ $key ] ) ) {
+						$this->orphans->failed( (string) $bucket, $key ); // Due again later, after the others.
+					} else {
+						$this->orphans->remove( (string) $bucket, $key );
+					}
 				}
 			}
-		}
-		$items = $this->items->get_many( array_column( $batch, 'path' ) );
-
-		$done      = array();
-		$failed    = array();
-		$by_bucket = array();
-		foreach ( $batch as $id => $orphan ) {
-			$item = isset( $items[ $orphan['path'] ] ) ? $items[ $orphan['path'] ] : null;
-			if ( $item && $item['bucket'] === $orphan['bucket'] && $item['object_key'] === $orphan['key'] ) {
-				$done[] = $id; // Referenced again: never delete.
-				continue;
-			}
-			$by_bucket[ $orphan['bucket'] ][ $orphan['key'] ] = $id;
-		}
-
-		foreach ( $by_bucket as $bucket => $keys ) {
-			try {
-				$errors = $this->settings->client( (string) $bucket )->delete_many( array_keys( $keys ) );
-			} catch ( \Exception $e ) {
-				$errors = array_fill_keys( array_keys( $keys ), $e->getMessage() );
-			}
-			foreach ( $keys as $key => $id ) {
-				if ( isset( $errors[ $key ] ) ) {
-					$failed[] = $id;
-				} else {
-					$done[] = $id;
-				}
+		} finally {
+			foreach ( $locked as $row ) {
+				Lock::release( self::object_lock( $row['bucket'], $row['object_key'] ), $row['token'] );
 			}
 		}
 
-		// Apply the results to the current queue: entries added meanwhile are kept, failed
-		// entries move to the end so that they never block the others.
-		$locked  = $this->lock_orphans();
-		$orphans = $this->orphans( true );
-		foreach ( $done as $id ) {
-			unset( $orphans[ $id ] );
-		}
-		foreach ( $failed as $id ) {
-			if ( isset( $orphans[ $id ] ) ) {
-				$entry = $orphans[ $id ];
-				unset( $orphans[ $id ] );
-				++$entry['attempts'];
-				$orphans[ $id ] = $entry;
-			}
-		}
-		update_option( self::ORPHANS_OPTION, $orphans, false );
-		if ( $locked ) {
-			$this->unlock_orphans();
-		}
-		return count( $orphans );
+		return $this->orphans->count();
 	}
 
 	/**

@@ -29,7 +29,7 @@ bms3o_t_settings(
 		'sign_all'       => false,
 	)
 );
-delete_option( $offloader::ORPHANS_OPTION );
+$offloader->orphan_store()->clear();
 wp_set_current_user( 0 );
 
 /**

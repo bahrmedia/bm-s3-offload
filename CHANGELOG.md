@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.0.4] – 2026-11-12
+
+### Fixed
+
+- Cleanup queue: when its lock could not be acquired within five seconds, changes were written anyway and could overwrite each other. The queue is now a table (`{prefix}bms3o_orphans`, one row per object); every change is a single atomic statement and needs no lock. The queue of 1.0.1 – 1.0.3 is migrated on update.
+- The cleanup checked whether an object was in use again before deleting it, but without synchronisation: a file made public again at that moment could lose its object. The cleanup now locks every object before checking and deleting it; uploads and privacy changes that write to a queued key take the same lock and remove the entry first (otherwise they report a temporary error).
+- Locks had no owner: a request whose lock had expired and been taken over could extend or release the new holder's lock. Locks now carry a random token; extending and releasing only work with it, and a background slice that lost its lock stops without writing its state.
+
+### Changed
+
+- Failed cleanup entries are due again after five minutes, after the other entries.
+- Filter `bms3o_object_lock_wait`: how long an upload or privacy change waits for the cleanup of the same object (default 10 seconds).
+
 ## [1.0.3] – 2026-11-12
 
 ### Fixed

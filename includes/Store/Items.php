@@ -27,7 +27,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Items {
 
-	const DB_VERSION  = '2';
+	const DB_VERSION  = '3';
 	const CACHE_GROUP = 'bms3o_items';
 	const SOURCE_POST = 'attachment';
 	const NOT_FOUND   = 0;
@@ -81,6 +81,8 @@ final class Items {
   KEY source (source_type,source_id)
 ) {$collate};"
 		);
+
+		Orphans::install();
 
 		update_option( 'bms3o_db_version', self::DB_VERSION, true );
 	}
@@ -414,7 +416,7 @@ final class Items {
 	 * @param string[] $paths Relative paths.
 	 * @return void
 	 */
-	private function forget( array $paths ) {
+	public function forget( array $paths ) {
 		foreach ( $paths as $path ) {
 			unset( $this->cache[ get_current_blog_id() ][ $path ] );
 			wp_cache_delete( self::cache_key( $path ), self::CACHE_GROUP );

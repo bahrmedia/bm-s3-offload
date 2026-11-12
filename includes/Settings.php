@@ -9,6 +9,7 @@ namespace BahrMedia\S3Offload;
 
 use BahrMedia\S3Offload\S3\Client;
 use BahrMedia\S3Offload\Store\Items;
+use BahrMedia\S3Offload\Store\Orphans;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -291,9 +292,7 @@ final class Settings {
 	 * @return bool
 	 */
 	private static function has_items() {
-		wp_cache_delete( Offloader::ORPHANS_OPTION, 'options' );
-		$orphans = get_option( Offloader::ORPHANS_OPTION, array() );
-		return ! empty( $orphans ) || ( new Items() )->count() > 0;
+		return ( new Orphans() )->count() > 0 || ( new Items() )->count() > 0;
 	}
 
 	/**

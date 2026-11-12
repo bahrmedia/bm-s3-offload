@@ -45,6 +45,8 @@ function bms3o_uninstall_site() {
 	}
 
 	$wpdb->query( "DROP TABLE IF EXISTS {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery,WordPress.DB.DirectDatabaseQuery.SchemaChange
+	$orphans = $wpdb->prefix . 'bms3o_orphans';
+	$wpdb->query( "DROP TABLE IF EXISTS {$orphans}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery,WordPress.DB.DirectDatabaseQuery.SchemaChange
 	delete_option( 'bms3o_settings' );
 	delete_option( 'bms3o_db_version' );
 	delete_option( 'bms3o_retry' );

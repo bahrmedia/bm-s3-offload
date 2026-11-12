@@ -1,6 +1,6 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: BM S3 Offload 1.0.3\n"
+"Project-Id-Version: BM S3 Offload 1.0.4\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/bm-s3-offload\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -594,54 +594,54 @@ msgstr "Fehler beim Synchronisieren von %s"
 msgid "Files in protected directories (BuddyBoss, WooCommerce, Easy Digital Downloads) cannot be made public."
 msgstr "Dateien in geschützten Verzeichnissen (BuddyBoss, WooCommerce, Easy Digital Downloads) können nicht öffentlich gemacht werden."
 
-#: includes/Offloader.php:1138
-#: includes/Offloader.php:1145
+#: includes/Offloader.php:1140
+#: includes/Offloader.php:1147
 msgid "Configuration"
 msgstr "Konfiguration"
 
-#: includes/Offloader.php:1138
+#: includes/Offloader.php:1140
 msgid "Endpoint, bucket, access key and secret key are required."
 msgstr "Endpoint, Bucket, Access Key und Secret Key sind erforderlich."
 
-#: includes/Offloader.php:1157
 #: includes/Offloader.php:1159
+#: includes/Offloader.php:1161
 msgid "Upload"
 msgstr "Upload"
 
-#: includes/Offloader.php:1165
 #: includes/Offloader.php:1167
+#: includes/Offloader.php:1169
 msgid "Download"
 msgstr "Download"
 
-#: includes/Offloader.php:1165
+#: includes/Offloader.php:1167
 msgid "Content mismatch."
 msgstr "Inhalt stimmt nicht überein."
 
-#: includes/Offloader.php:1181
+#: includes/Offloader.php:1183
 msgid "Public delivery"
 msgstr "Öffentliche Auslieferung"
 
 #. translators: 1: HTTP status, 2: URL
-#: includes/Offloader.php:1185
+#: includes/Offloader.php:1187
 #, php-format
 msgid "HTTP %1$s for %2$s – make the object prefix publicly readable (bucket policy) or enable signed URLs for all files."
 msgstr "HTTP %1$s für %2$s – das Objekt-Präfix öffentlich lesbar machen (Bucket-Policy) oder signierte URLs für alle Dateien aktivieren."
 
-#: includes/Offloader.php:1195
+#: includes/Offloader.php:1197
 msgid "Private objects are protected"
 msgstr "Private Objekte sind geschützt"
 
 #. translators: %s: HTTP status
-#: includes/Offloader.php:1199
+#: includes/Offloader.php:1201
 #, php-format
 msgid "Anonymous request returned HTTP %s. Private files are publicly readable – restrict the bucket policy to the public prefix."
 msgstr "Ein anonymer Abruf lieferte HTTP %s. Private Dateien sind öffentlich lesbar – die Bucket-Policy auf das öffentliche Präfix beschränken."
 
-#: includes/Offloader.php:1213
+#: includes/Offloader.php:1215
 msgid "Signed URLs"
 msgstr "Signierte URLs"
 
-#: includes/Offloader.php:1216
+#: includes/Offloader.php:1218
 msgid "Delete"
 msgstr "Löschen"
 
@@ -649,15 +649,15 @@ msgstr "Löschen"
 msgid "Other S3-compatible service"
 msgstr "Anderer S3-kompatibler Dienst"
 
-#: includes/Settings.php:380
+#: includes/Settings.php:379
 msgid "The object prefix must not be empty, otherwise a public bucket policy would also cover private files."
 msgstr "Das Objekt-Präfix darf nicht leer sein, sonst würde eine öffentliche Bucket-Policy auch private Dateien erfassen."
 
-#: includes/Settings.php:383
+#: includes/Settings.php:382
 msgid "The private prefix must not be empty, otherwise private files would get public keys."
 msgstr "Das Privat-Präfix darf nicht leer sein, sonst bekämen private Dateien öffentliche Keys."
 
-#: includes/Settings.php:386
+#: includes/Settings.php:385
 msgid "The private prefix must not start with the object prefix, otherwise private files would be inside the public area."
 msgstr "Das Privat-Präfix darf nicht mit dem Objekt-Präfix beginnen, sonst lägen private Dateien im öffentlichen Bereich."
 
@@ -678,33 +678,33 @@ msgstr "Alle Objekte wurden auf den neuen Endpunkt kopiert (z. B. mit rclone)."
 msgid "Files are offloaded to the current endpoint. A new endpoint is only accepted with this confirmation. Afterwards check the new storage with \"wp bm-s3 verify\"."
 msgstr "Dateien liegen auf dem aktuellen Endpunkt. Ein neuer Endpunkt wird nur mit dieser Bestätigung übernommen. Den neuen Speicher danach mit \"wp bm-s3 verify\" prüfen."
 
-#: includes/Offloader.php:318
+#: includes/Offloader.php:320
 msgid "The upload could not be recorded in the database."
 msgstr "Der Upload konnte nicht in der Datenbank gespeichert werden."
 
-#: includes/Offloader.php:531
+#: includes/Offloader.php:533
 msgid "The restored file could not be recorded in the database."
 msgstr "Die wiederhergestellte Datei konnte nicht in der Datenbank gespeichert werden."
 
-#: includes/Offloader.php:623
+#: includes/Offloader.php:634
 msgid "The new state could not be recorded in the database."
 msgstr "Der neue Zustand konnte nicht in der Datenbank gespeichert werden."
 
-#: includes/Offloader.php:328
-#: includes/Offloader.php:629
+#: includes/Offloader.php:330
+#: includes/Offloader.php:640
 msgid "The previous copy could not be deleted yet. It stays reachable until the hourly cleanup has removed it."
 msgstr "Die bisherige Kopie konnte noch nicht gelöscht werden. Sie bleibt erreichbar, bis die stündliche Bereinigung sie entfernt hat."
 
-#: includes/Settings.php:196
+#: includes/Settings.php:197
 msgid "The secret key could not be encrypted and was not saved. Define BMS3O_SECRET_KEY in wp-config.php instead."
 msgstr "Der geheime Schlüssel konnte nicht verschlüsselt werden und wurde nicht gespeichert. Stattdessen BMS3O_SECRET_KEY in der wp-config.php definieren."
 
-#: includes/Settings.php:268
+#: includes/Settings.php:269
 msgid "The endpoint was not changed because files are offloaded to the current storage. Copy all objects to the new storage first (e.g. with rclone), then change the endpoint again and confirm the copy."
 msgstr "Der Endpunkt wurde nicht geändert, weil Dateien auf den aktuellen Speicher ausgelagert sind. Bitte zuerst alle Objekte auf den neuen Speicher kopieren (z. B. mit rclone), dann den Endpunkt erneut ändern und die Kopie bestätigen."
 
 #. translators: 1: previous storage, 2: configured storage
-#: includes/Settings.php:341
+#: includes/Settings.php:340
 #, php-format
 msgid "The files were offloaded to %1$s, but the endpoint is now %2$s. Bucket operations are paused. Copy all objects to the new storage, then confirm it with \"wp bm-s3 storage confirm\" or in the settings."
 msgstr "Die Dateien wurden auf %1$s ausgelagert, der Endpunkt ist jetzt aber %2$s. Bucket-Operationen sind pausiert. Bitte alle Objekte auf den neuen Speicher kopieren und das mit \"wp bm-s3 storage confirm\" oder in den Einstellungen bestätigen."
@@ -742,3 +742,8 @@ msgid "%d object could not be deleted from the bucket after several attempts (e.
 msgid_plural "%d objects could not be deleted from the bucket after several attempts (e.g. missing delete permission). They are retried hourly; until then they stay in the bucket and, if they are previous public copies, reachable."
 msgstr[0] "%d Objekt konnte nach mehreren Versuchen nicht aus dem Bucket gelöscht werden (z. B. fehlende Löschberechtigung). Es wird stündlich erneut versucht; bis dahin bleibt es im Bucket und ist, falls es eine bisherige öffentliche Kopie ist, erreichbar."
 msgstr[1] "%d Objekte konnten nach mehreren Versuchen nicht aus dem Bucket gelöscht werden (z. B. fehlende Löschberechtigung). Sie werden stündlich erneut versucht; bis dahin bleiben sie im Bucket und sind, falls es bisherige öffentliche Kopien sind, erreichbar."
+
+#: includes/Offloader.php:288
+#: includes/Offloader.php:611
+msgid "The object is being cleaned up right now. Please try again."
+msgstr "Das Objekt wird gerade bereinigt. Bitte erneut versuchen."

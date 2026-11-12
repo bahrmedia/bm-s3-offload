@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-2.0-or-later.
 msgid ""
 msgstr ""
-"Project-Id-Version: BM S3 Offload 1.0.3\n"
+"Project-Id-Version: BM S3 Offload 1.0.4\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/bm-s3-offload\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-12T09:38:37+00:00\n"
+"POT-Creation-Date: 2026-11-12T10:42:13+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: bm-s3-offload\n"
@@ -645,71 +645,76 @@ msgstr[1] ""
 msgid "Files in protected directories (BuddyBoss, WooCommerce, Easy Digital Downloads) cannot be made public."
 msgstr ""
 
-#: includes/Offloader.php:318
+#: includes/Offloader.php:288
+#: includes/Offloader.php:611
+msgid "The object is being cleaned up right now. Please try again."
+msgstr ""
+
+#: includes/Offloader.php:320
 msgid "The upload could not be recorded in the database."
 msgstr ""
 
-#: includes/Offloader.php:328
-#: includes/Offloader.php:629
+#: includes/Offloader.php:330
+#: includes/Offloader.php:640
 msgid "The previous copy could not be deleted yet. It stays reachable until the hourly cleanup has removed it."
 msgstr ""
 
-#: includes/Offloader.php:531
+#: includes/Offloader.php:533
 msgid "The restored file could not be recorded in the database."
 msgstr ""
 
-#: includes/Offloader.php:623
+#: includes/Offloader.php:634
 msgid "The new state could not be recorded in the database."
 msgstr ""
 
-#: includes/Offloader.php:1138
-#: includes/Offloader.php:1145
+#: includes/Offloader.php:1140
+#: includes/Offloader.php:1147
 msgid "Configuration"
 msgstr ""
 
-#: includes/Offloader.php:1138
+#: includes/Offloader.php:1140
 msgid "Endpoint, bucket, access key and secret key are required."
 msgstr ""
 
-#: includes/Offloader.php:1157
 #: includes/Offloader.php:1159
+#: includes/Offloader.php:1161
 msgid "Upload"
 msgstr ""
 
-#: includes/Offloader.php:1165
 #: includes/Offloader.php:1167
+#: includes/Offloader.php:1169
 msgid "Download"
 msgstr ""
 
-#: includes/Offloader.php:1165
+#: includes/Offloader.php:1167
 msgid "Content mismatch."
 msgstr ""
 
-#: includes/Offloader.php:1181
+#: includes/Offloader.php:1183
 msgid "Public delivery"
 msgstr ""
 
 #. translators: 1: HTTP status, 2: URL
-#: includes/Offloader.php:1185
+#: includes/Offloader.php:1187
 #, php-format
 msgid "HTTP %1$s for %2$s – make the object prefix publicly readable (bucket policy) or enable signed URLs for all files."
 msgstr ""
 
-#: includes/Offloader.php:1195
+#: includes/Offloader.php:1197
 msgid "Private objects are protected"
 msgstr ""
 
 #. translators: %s: HTTP status
-#: includes/Offloader.php:1199
+#: includes/Offloader.php:1201
 #, php-format
 msgid "Anonymous request returned HTTP %s. Private files are publicly readable – restrict the bucket policy to the public prefix."
 msgstr ""
 
-#: includes/Offloader.php:1213
+#: includes/Offloader.php:1215
 msgid "Signed URLs"
 msgstr ""
 
-#: includes/Offloader.php:1216
+#: includes/Offloader.php:1218
 msgid "Delete"
 msgstr ""
 
@@ -717,28 +722,28 @@ msgstr ""
 msgid "Other S3-compatible service"
 msgstr ""
 
-#: includes/Settings.php:196
+#: includes/Settings.php:197
 msgid "The secret key could not be encrypted and was not saved. Define BMS3O_SECRET_KEY in wp-config.php instead."
 msgstr ""
 
-#: includes/Settings.php:268
+#: includes/Settings.php:269
 msgid "The endpoint was not changed because files are offloaded to the current storage. Copy all objects to the new storage first (e.g. with rclone), then change the endpoint again and confirm the copy."
 msgstr ""
 
 #. translators: 1: previous storage, 2: configured storage
-#: includes/Settings.php:341
+#: includes/Settings.php:340
 #, php-format
 msgid "The files were offloaded to %1$s, but the endpoint is now %2$s. Bucket operations are paused. Copy all objects to the new storage, then confirm it with \"wp bm-s3 storage confirm\" or in the settings."
 msgstr ""
 
-#: includes/Settings.php:380
+#: includes/Settings.php:379
 msgid "The object prefix must not be empty, otherwise a public bucket policy would also cover private files."
 msgstr ""
 
-#: includes/Settings.php:383
+#: includes/Settings.php:382
 msgid "The private prefix must not be empty, otherwise private files would get public keys."
 msgstr ""
 
-#: includes/Settings.php:386
+#: includes/Settings.php:385
 msgid "The private prefix must not start with the object prefix, otherwise private files would be inside the public area."
 msgstr ""

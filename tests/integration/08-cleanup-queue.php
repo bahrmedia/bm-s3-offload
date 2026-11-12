@@ -11,6 +11,7 @@
 
 use BahrMedia\S3Offload\Lock;
 use BahrMedia\S3Offload\Settings;
+use BahrMedia\S3Offload\Store\Orphans;
 use BahrMedia\S3Offload\Store\Items;
 
 require getenv( 'BMS3O_TEST_DIR' ) . '/lib.php';
@@ -30,8 +31,17 @@ bms3o_t_settings(
 		'delete_remote'  => true,
 	)
 );
-delete_option( $offloader::ORPHANS_OPTION );
+$offloader->orphan_store()->clear();
 wp_set_current_user( 0 );
+
+/**
+ * Makes all queued entries due now (failed entries wait for a retry delay).
+ *
+ * @return void
+ */
+function bms3o_t_queue_due() {
+	$GLOBALS['wpdb']->query( 'UPDATE ' . Orphans::table() . ' SET next_attempt = 0' );
+}
 
 /**
  * Creates an object and returns its key.
@@ -51,7 +61,7 @@ function bms3o_t_queue_object( $name ) {
  * @return string[]
  */
 function bms3o_t_queued() {
-	return array_values( wp_list_pluck( bms3o_t_plugin()->offloader->orphans( true ), 'key' ) );
+	return array_values( wp_list_pluck( bms3o_t_plugin()->offloader->orphans(), 'key' ) );
 }
 
 bms3o_t_section( 'Entries added while the cleanup runs are kept' );
@@ -82,16 +92,7 @@ bms3o_t_section( 'Entries are only executed on the storage they belong to' );
 
 $c       = bms3o_t_queue_object( 'c' );
 $other   = 'https://other-storage.invalid';
-$orphans = array(
-	md5( $bucket . '|' . $c ) => array(
-		'bucket'   => $bucket,
-		'key'      => $c,
-		'path'     => 'bms3o-test/queue-c.txt',
-		'storage'  => $other,
-		'attempts' => 0,
-	),
-);
-update_option( $offloader::ORPHANS_OPTION, $orphans, false );
+$offloader->orphan_store()->add( array( array( $bucket, $c, 'bms3o-test/queue-c.txt' ) ), $other );
 $offloader->process_orphans();
 bms3o_t( bms3o_t_object_exists( $c ) && array( $c ) === bms3o_t_queued(), 'An entry of another storage is neither executed nor dropped' );
 do_action( 'bms3o_storage_changed', $other, $storage );
@@ -152,10 +153,13 @@ $offloader->process_orphans( 1 );
 bms3o_t( array( $f, $e ) === bms3o_t_queued(), 'A failed entry moves to the end of the queue', bms3o_t_queued() );
 $offloader->process_orphans( 1 );
 bms3o_t( ! bms3o_t_object_exists( $f ) && array( $e ) === bms3o_t_queued(), 'The next entry is processed' );
+bms3o_t_queue_due();
 $offloader->process_orphans( 1 );
+bms3o_t_queue_due();
 $offloader->process_orphans( 1 );
 bms3o_t( 1 === $offloader->failing_orphans(), 'Repeated failures are reported' );
 remove_filter( 'pre_http_request', $deny, 10 );
+bms3o_t_queue_due();
 $offloader->process_orphans();
 bms3o_t( ! bms3o_t_object_exists( $e ) && 0 === $offloader->failing_orphans() && array() === bms3o_t_queued(), 'Deleted once the deletion works again' );
 
@@ -187,21 +191,99 @@ bms3o_t( isset( $result['errors'][ $file ] ) && $offloader->items()->get( $file 
 bms3o_t( in_array( $public, bms3o_t_queued(), true ) && bms3o_t_object_exists( $public ), 'The public copy is queued for cleanup' );
 $offloader->process_orphans();
 bms3o_t( ! bms3o_t_object_exists( $public ), 'The cleanup removes it' );
-wp_delete_attachment( $id, true );
-delete_option( $offloader::ORPHANS_OPTION );
 
-bms3o_t_section( 'Atomic lock' );
+bms3o_t_section( 'The cleanup never deletes an object that is written again meanwhile' );
+
+// The previous public copy is left behind (simulated) and queued.
+$public_only = static function ( $pre, $args, $url ) {
+	if ( false === $pre && ( 'DELETE' === $args['method'] || 'POST' === $args['method'] ) && false === strpos( $url, '/private/' ) ) {
+		return array(
+			'headers'  => array(),
+			'body'     => '',
+			'response' => array(
+				'code'    => 403,
+				'message' => 'Forbidden',
+			),
+			'cookies'  => array(),
+			'filename' => null,
+		);
+	}
+	return $pre;
+};
+update_post_meta( $id, '_bms3o_private', '0' );
+$media->offload( $id, null, true );
+add_filter( 'pre_http_request', $public_only, 10, 3 );
+$media->set_privacy( $id, true );
+remove_filter( 'pre_http_request', $public_only, 10 );
+bms3o_t( in_array( $public, bms3o_t_queued(), true ), 'The public copy is queued' );
+
+// While the cleanup deletes it, another request makes the file public again (same key).
+$short_wait  = static function () {
+	return 0.5;
+};
+$reactivated = null;
+$interleave  = static function ( $pre, $args, $url ) use ( $media, $id, &$reactivated ) {
+	if ( false === $pre && null === $reactivated && 'POST' === $args['method'] && false !== strpos( $url, '?delete' ) ) {
+		$reactivated = $media->set_privacy( $id, false );
+	}
+	return $pre;
+};
+add_filter( 'bms3o_object_lock_wait', $short_wait );
+add_filter( 'pre_http_request', $interleave, 10, 3 );
+$offloader->process_orphans();
+remove_filter( 'pre_http_request', $interleave, 10 );
+remove_filter( 'bms3o_object_lock_wait', $short_wait );
+
+$offloader->items()->forget( array( $file ) );
+$item = $offloader->items()->get( $file );
+bms3o_t( ! empty( $reactivated ) && $item['is_private'], 'The concurrent change waits for the cleanup and reports it', $reactivated );
+bms3o_t( bms3o_t_object_exists( $item['object_key'] ), 'The object the file points to exists' );
+$errors = $media->set_privacy( $id, false );
+$item   = $offloader->items()->get( $file );
+bms3o_t( empty( $errors ) && $item['object_key'] === $public && bms3o_t_object_exists( $public ), 'Afterwards the file can be made public again', $errors );
+
+wp_delete_attachment( $id, true );
+$offloader->orphan_store()->clear();
+
+bms3o_t_section( 'Queue of 1.0.1 – 1.0.3 is migrated' );
+
+$legacy_key = bms3o_t_queue_object( 'legacy' );
+update_option(
+	Orphans::LEGACY_OPTION,
+	array(
+		md5( $bucket . '|' . $legacy_key ) => array(
+			'bucket'   => $bucket,
+			'key'      => $legacy_key,
+			'path'     => 'bms3o-test/queue-legacy.txt',
+			'attempts' => 2,
+		),
+	),
+	false
+);
+Orphans::install();
+bms3o_t( array( $legacy_key ) === bms3o_t_queued() && false === get_option( Orphans::LEGACY_OPTION ), 'Entries move to the table, the option is removed' );
+$offloader->process_orphans();
+bms3o_t( ! bms3o_t_object_exists( $legacy_key ) && array() === bms3o_t_queued(), 'Migrated entries are processed' );
+
+bms3o_t_section( 'Atomic lock with owner' );
 
 $name = 'bms3o_test_lock';
-Lock::release( $name );
-bms3o_t( Lock::acquire( $name, 60 ) && Lock::is_locked( $name ), 'A free lock is acquired' );
-bms3o_t( ! Lock::acquire( $name, 60 ), 'A held lock is not acquired a second time' );
+$GLOBALS['wpdb']->delete( $GLOBALS['wpdb']->options, array( 'option_name' => $name ) );
+$a = Lock::acquire( $name, 60 );
+bms3o_t( '' !== $a && Lock::is_locked( $name ) && Lock::holds( $name, $a ), 'A free lock is acquired' );
+bms3o_t( '' === Lock::acquire( $name, 60 ), 'A held lock is not acquired a second time' );
 add_option( $name, 'x' ); // add_option() must not break the lock either.
-bms3o_t( Lock::is_locked( $name ), 'add_option() on a held lock changes nothing' );
-Lock::release( $name );
-bms3o_t( ! Lock::is_locked( $name ) && false === get_option( $name ), 'Released (also for get_option())' );
-update_option( $name, (string) ( time() - 5 ), false );
-bms3o_t( Lock::acquire( $name, 60 ), 'An expired lock is taken over' );
-Lock::release( $name );
+bms3o_t( Lock::holds( $name, $a ), 'add_option() on a held lock changes nothing' );
+bms3o_t( Lock::refresh( $name, $a, 60 ), 'The holder can extend it' );
+
+// A runs too long: its lock expires and B takes it over.
+$GLOBALS['wpdb']->update( $GLOBALS['wpdb']->options, array( 'option_value' => ( time() - 5 ) . '|' . $a ), array( 'option_name' => $name ) );
+$b = Lock::acquire( $name, 60 );
+bms3o_t( '' !== $b && $b !== $a, 'An expired lock is taken over' );
+bms3o_t( ! Lock::refresh( $name, $a, 60 ) && Lock::holds( $name, $b ), 'The previous holder cannot extend the new lock' );
+Lock::release( $name, $a );
+bms3o_t( Lock::holds( $name, $b ), 'The previous holder cannot release the new lock' );
+Lock::release( $name, $b );
+bms3o_t( ! Lock::is_locked( $name ) && false === get_option( $name ), 'Released by its holder (also for get_option())' );
 
 bms3o_t_done();

@@ -57,11 +57,11 @@ final class Background {
 	private $offloader;
 
 	/**
-	 * Whether this request holds the lock.
+	 * Token of the lock held by this request ('' = none).
 	 *
-	 * @var bool
+	 * @var string
 	 */
-	private $holds_lock = false;
+	private $lock_token = '';
 
 	/**
 	 * Constructor.
@@ -221,8 +221,13 @@ final class Background {
 				break;
 			}
 
+			// Heartbeat. A slice that lost its lock (it ran longer than the lock lifetime and
+			// another slice took over) must not write its state anymore.
+			if ( ! $this->lock() ) {
+				$current = false;
+				break;
+			}
 			$this->write( $state );
-			$this->lock(); // Heartbeat.
 		} while ( 'running' === $state['status'] && time() < $deadline );
 
 		$this->unlock();
@@ -251,15 +256,15 @@ final class Background {
 	 * @return bool
 	 */
 	private function lock() {
-		if ( $this->holds_lock ) {
-			Lock::refresh( self::LOCK, self::STALE );
-			return true;
+		if ( '' !== $this->lock_token ) {
+			if ( Lock::refresh( self::LOCK, $this->lock_token, self::STALE ) ) {
+				return true;
+			}
+			$this->lock_token = ''; // Lost.
+			return false;
 		}
-		if ( ! Lock::acquire( self::LOCK, self::STALE ) ) {
-			return false; // Another slice is alive.
-		}
-		$this->holds_lock = true;
-		return true;
+		$this->lock_token = Lock::acquire( self::LOCK, self::STALE );
+		return '' !== $this->lock_token; // '' = another slice is alive.
 	}
 
 	/**
@@ -268,8 +273,8 @@ final class Background {
 	 * @return void
 	 */
 	private function unlock() {
-		Lock::release( self::LOCK );
-		$this->holds_lock = false;
+		Lock::release( self::LOCK, $this->lock_token ); // Only our own lock.
+		$this->lock_token = '';
 	}
 
 	/**
