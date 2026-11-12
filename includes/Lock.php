@@ -12,7 +12,7 @@ defined( 'ABSPATH' ) || exit;
 /**
  * A lock is a row in the options table whose value is its expiry time.
  *
- * add_option() is not suitable: it checks whether the option exists and then
+ * The function add_option() is not suitable: it checks whether the option exists and then
  * runs an upsert, so two requests can both "add" it. INSERT IGNORE on the
  * unique option_name is atomic. An expired lock (its holder died) is taken
  * over. The object cache is kept consistent, so get_option()/delete_option()
