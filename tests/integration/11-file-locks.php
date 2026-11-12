@@ -89,7 +89,7 @@ $filter = bms3o_t_before(
 		$second = $other->set_privacy( array( $file ), false );
 	}
 );
-$first = $offloader->set_privacy( array( $file ), true );
+$first  = $offloader->set_privacy( array( $file ), true );
 remove_filter( 'pre_http_request', $filter, 10 );
 
 bms3o_t( bms3o_t_item_object_exists( $file ), 'The object the file points to exists', array( $first, $second ) );
@@ -142,7 +142,7 @@ $filter  = bms3o_t_before(
 		$removed = $other->remove_local( $paths, true );
 	}
 );
-$errors = $media->unoffload( $id );
+$errors  = $media->unoffload( $id );
 remove_filter( 'pre_http_request', $filter, 10 );
 bms3o_t( is_file( $local ) || bms3o_t_item_object_exists( $file ), 'The file still exists locally or in the bucket', array( $errors, $removed ) );
 bms3o_t( empty( $errors ) && array() === $removed && is_file( $local ), 'The concurrent removal waits and keeps the local copy', array( $errors, $removed ) );
@@ -182,8 +182,8 @@ remove_filter( 'pre_http_request', $probe, 10 );
 bms3o_t( array( $path ) === $upload['uploaded'] && 3 === count( $seen ) && min( $seen ) >= 30, 'Every part ends at least 30 seconds before the file lock expires', array( $upload['errors'], $seen ) );
 
 // The lock is lost during the upload (e.g. taken over): no further request is sent.
-$parts = 0;
-$lose  = static function ( $pre, $args, $url ) use ( &$parts, $lock_name ) {
+$parts  = 0;
+$lose   = static function ( $pre, $args, $url ) use ( &$parts, $lock_name ) {
 	if ( false === $pre && 'PUT' === $args['method'] && false !== strpos( $url, 'partNumber=' ) && 1 === ++$parts ) {
 		$GLOBALS['wpdb']->query( $GLOBALS['wpdb']->prepare( "DELETE FROM {$GLOBALS['wpdb']->options} WHERE option_name = %s", $lock_name ) );
 	}
