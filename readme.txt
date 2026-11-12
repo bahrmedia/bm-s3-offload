@@ -4,7 +4,7 @@ Tags: s3, offload, buddyboss, woocommerce, cdn
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.0.1
+Stable tag: 1.0.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -78,6 +78,10 @@ No. URLs in the database stay local and are rewritten on output, so you can deac
 s3:PutObject, s3:GetObject, s3:DeleteObject, s3:ListBucket and the multipart upload permissions on the bucket.
 
 == Changelog ==
+
+= 1.0.2 =
+* Notice when WooCommerce downloads or BuddyBoss media exist only in the bucket while their integration is switched off.
+* Bulk operations in the browser: time budget per request instead of a fixed number of items; failed requests are retried after 3, 10 and 30 seconds.
 
 = 1.0.1 =
 * Fixed: uninstall could remove the mapping of files that exist only in the bucket.
