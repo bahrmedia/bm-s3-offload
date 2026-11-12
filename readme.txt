@@ -82,6 +82,7 @@ s3:PutObject, s3:GetObject, s3:DeleteObject, s3:ListBucket and the multipart upl
 = 1.0.3 =
 * Fixed: the cleanup queue could lose entries added during a cleanup run, ignored the storage they belong to and let permanently failing entries block the others.
 * Fixed: a re-upload that made a file private did not report a public copy that could not be deleted yet.
+* Fixed: the lock of background operations was not atomic.
 * Notice for objects that could not be deleted after several attempts; time budget of bulk operations checked after every item.
 
 = 1.0.2 =

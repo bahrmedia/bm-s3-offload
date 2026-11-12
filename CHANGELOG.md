@@ -9,6 +9,7 @@ All notable changes to this project are documented in this file. The format foll
 - Cleanup queue: entries added by another request while the hourly cleanup was running were lost. Queue changes are now serialised with an atomic lock and the cleanup only changes the entries it processed.
 - Queued deletions did not block a change of storage, and the cleanup ran them against the new storage. They now block an unconfirmed change, carry the storage they belong to and only run there; a confirmed change takes them along.
 - A re-upload that made a file private reported success although the previous public copy could not be deleted yet; it is now reported like a privacy change.
+- The lock of background operations used `add_option()`, which is not atomic (check, then upsert): slices started at the same moment could both acquire it. Both locks now use an atomic `INSERT IGNORE` (class `Lock`); in a test with 20 simultaneous processes exactly one acquires it (previously 7–12).
 - Entries that failed permanently blocked the following ones (always the first 200 were tried). Failed entries now move to the end of the queue.
 
 ### Changed

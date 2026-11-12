@@ -245,29 +245,19 @@ final class Background {
 	/**
 	 * Acquires the lock, or refreshes it when this request holds it (heartbeat).
 	 *
-	 * Uses add_option(), which is atomic (unique option name), so only one slice can win.
+	 * The lock is atomic (see Lock): only one slice can win, an expired lock of a
+	 * slice that died is taken over.
 	 *
 	 * @return bool
 	 */
 	private function lock() {
-		$expires = time() + self::STALE;
-
 		if ( $this->holds_lock ) {
-			update_option( self::LOCK, $expires, false );
+			Lock::refresh( self::LOCK, self::STALE );
 			return true;
 		}
-
-		if ( ! add_option( self::LOCK, $expires, '', false ) ) {
-			if ( $this->is_locked() ) {
-				return false; // Another slice is alive.
-			}
-			// Expired lock of a slice that died: take it over (again atomically).
-			delete_option( self::LOCK );
-			if ( ! add_option( self::LOCK, $expires, '', false ) ) {
-				return false;
-			}
+		if ( ! Lock::acquire( self::LOCK, self::STALE ) ) {
+			return false; // Another slice is alive.
 		}
-
 		$this->holds_lock = true;
 		return true;
 	}
@@ -278,7 +268,7 @@ final class Background {
 	 * @return void
 	 */
 	private function unlock() {
-		delete_option( self::LOCK );
+		Lock::release( self::LOCK );
 		$this->holds_lock = false;
 	}
 
@@ -288,8 +278,7 @@ final class Background {
 	 * @return bool
 	 */
 	private function is_locked() {
-		wp_cache_delete( self::LOCK, 'options' );
-		return (int) get_option( self::LOCK ) > time();
+		return Lock::is_locked( self::LOCK );
 	}
 
 	/**

@@ -9,6 +9,7 @@
 
 // phpcs:disable WordPress.WP.AlternativeFunctions, WordPress.DB
 
+use BahrMedia\S3Offload\Lock;
 use BahrMedia\S3Offload\Settings;
 use BahrMedia\S3Offload\Store\Items;
 
@@ -188,5 +189,19 @@ $offloader->process_orphans();
 bms3o_t( ! bms3o_t_object_exists( $public ), 'The cleanup removes it' );
 wp_delete_attachment( $id, true );
 delete_option( $offloader::ORPHANS_OPTION );
+
+bms3o_t_section( 'Atomic lock' );
+
+$name = 'bms3o_test_lock';
+Lock::release( $name );
+bms3o_t( Lock::acquire( $name, 60 ) && Lock::is_locked( $name ), 'A free lock is acquired' );
+bms3o_t( ! Lock::acquire( $name, 60 ), 'A held lock is not acquired a second time' );
+add_option( $name, 'x' ); // add_option() must not break the lock either.
+bms3o_t( Lock::is_locked( $name ), 'add_option() on a held lock changes nothing' );
+Lock::release( $name );
+bms3o_t( ! Lock::is_locked( $name ) && false === get_option( $name ), 'Released (also for get_option())' );
+update_option( $name, (string) ( time() - 5 ), false );
+bms3o_t( Lock::acquire( $name, 60 ), 'An expired lock is taken over' );
+Lock::release( $name );
 
 bms3o_t_done();

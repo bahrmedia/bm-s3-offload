@@ -728,26 +728,15 @@ final class Offloader {
 	}
 
 	/**
-	 * Acquires the orphan queue lock (atomic INSERT IGNORE; add_option() is a
-	 * check-then-upsert and not atomic). A lock older than 30 seconds belongs
-	 * to a request that died and is taken over. Waits up to 5 seconds.
+	 * Acquires the orphan queue lock (atomic, see Lock). A lock older than 30
+	 * seconds belongs to a request that died and is taken over. Waits up to
+	 * 5 seconds.
 	 *
 	 * @return bool Whether the lock was acquired. Callers continue without it
 	 *              rather than losing queue entries.
 	 */
 	private function lock_orphans() {
-		global $wpdb;
-		// phpcs:disable WordPress.DB.DirectDatabaseQuery
-		for ( $i = 0; $i < 50; $i++ ) {
-			$now = time();
-			$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s AND CAST(option_value AS UNSIGNED) < %d", self::ORPHANS_LOCK, $now - 30 ) );
-			if ( 1 === (int) $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", self::ORPHANS_LOCK, (string) $now ) ) ) {
-				return true;
-			}
-			usleep( 100000 );
-		}
-		// phpcs:enable
-		return false;
+		return Lock::acquire( self::ORPHANS_LOCK, 30, 5 );
 	}
 
 	/**
@@ -756,8 +745,7 @@ final class Offloader {
 	 * @return void
 	 */
 	private function unlock_orphans() {
-		global $wpdb;
-		$wpdb->delete( $wpdb->options, array( 'option_name' => self::ORPHANS_LOCK ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		Lock::release( self::ORPHANS_LOCK );
 	}
 
 	/**

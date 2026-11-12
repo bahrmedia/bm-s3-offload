@@ -50,6 +50,7 @@ function bms3o_uninstall_site() {
 	delete_option( 'bms3o_retry' );
 	delete_option( 'bms3o_background' );
 	delete_option( 'bms3o_background_lock' );
+	delete_option( 'bms3o_orphans_lock' );
 	delete_option( 'bms3o_orphans' );
 	delete_option( 'bms3o_storage' );
 	delete_transient( 'bms3o_bb_dirs' );
