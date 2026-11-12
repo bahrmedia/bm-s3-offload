@@ -42,7 +42,7 @@ BM S3 Offload is free without a Pro version, ships its own small S3 client inste
 - **WooCommerce**: downloadable products are delivered from the bucket. WooCommerce checks the order, then the customer is redirected to a short-lived signed URL – downloads never pass through your server.
 - **CDN for scripts and styles**: rewrite theme, plugin and core assets to a pull CDN (front end only).
 - **WebP/AVIF copies** created by image optimisers (`photo.jpg.webp`, EWWW, WebP Express) are offloaded, rewritten and removed together with the image.
-- **Page builders**: Elementor output is rewritten like post content.
+- **Page builders**: Elementor output is rewritten like post content; background images in Elementor's generated CSS use bucket URLs, and its CSS cache is cleared when URLs change (privacy change, *Leave the bucket*, settings).
 - **Verify** (`wp bm-s3 verify --fix`): checks that every offloaded file exists in the bucket and repairs missing objects from local copies.
 - **Leave the bucket**: move everything back to the server with one click.
 - **Media library**: status column, filter by storage state, row actions and bulk actions (offload, remove local copy, restore, make private/public, remove from bucket).
@@ -71,6 +71,20 @@ BuddyBoss' symlink option is disabled automatically while media are offloaded, a
 |---|---|
 | WooCommerce product files (`woocommerce_uploads/`) | Restricted private objects. After WooCommerce has validated the order, download limit and expiry, the customer is redirected to a signed URL (valid for 10 minutes, `Content-Disposition: attachment`). |
 | Easy Digital Downloads files (`edd/`) | Stored as restricted private objects (backup); local copies are always kept, EDD serves them as usual. |
+
+### Tested with other plugins
+
+The integration tests run with these free plugins active (GitHub Actions):
+
+| Plugin | What is covered |
+|---|---|
+| **Polylang** (media translation), **WPML** (same mechanism) | Translations of an attachment share its file: the file is uploaded once, deleting one language version keeps the objects for the others, *Remove local copies* works although Polylang blocks `wp_delete_file()` for shared files. |
+| **Elementor** | Background images in generated CSS are delivered from the bucket; the CSS cache is cleared when URLs change. |
+| **Enable Media Replace** | Replacing with the same or a new file name, with or without local copy: new files are offloaded, objects of old files deleted, URLs in content replaced. |
+| **EWWW Image Optimizer** | Optimised files and WebP copies end up in the bucket; files an optimiser changes later are uploaded again when it saves the metadata. |
+| **BuddyBoss Platform**, **WooCommerce** | See above. |
+
+Files of form plugins (Gravity Forms, WPForms …) are not part of the media library and stay on the server.
 
 ## Requirements
 
@@ -217,6 +231,7 @@ output → wp_get_attachment_url / image_downsize / srcset / content filters
 | `bms3o_count_cache_ttl` | filter | Lifetime of the cached counters of the tools tab in seconds (default 300, 0 disables the cache) |
 | `bms3o_file_lock_wait` | filter | Seconds an operation waits for another operation on the same file (default 10) |
 | `bms3o_object_lock_wait` | filter | Seconds an upload or privacy change waits for the cleanup of the same object (default 10) |
+| `bms3o_urls_changed` | action | After URLs of files changed (object moved or deleted, or settings saved; empty list = all) |
 | `bms3o_storage_changed` | action | After a confirmed change of storage (previous and new storage identity) |
 
 ## Development
@@ -242,4 +257,5 @@ GPL-2.0-or-later. © Bahr Media. See [LICENSE](LICENSE).
 - Auslieferung über Bucket, CDN oder signierte URLs; Inhalte in der Datenbank bleiben unverändert (kein Lock-in)
 - **BuddyBoss**: Fotos, Dokumente und Videos werden privat gespeichert und nur nach der Zugriffsprüfung von BuddyBoss ausgeliefert (öffentlich, Freunde, nur ich, Gruppen, Nachrichten, Foren). Profil-, Gruppen- und Titelbilder werden gespiegelt.
 - Alle Einstellungen auch per `wp-config.php` (`BMS3O_*`), Zugangsdaten in der Datenbank verschlüsselt
+- Getestet mit Polylang (Medienübersetzung; WPML funktioniert gleich), Elementor, Enable Media Replace und EWWW Image Optimizer; Dateien von Formular-Plugins bleiben auf dem Server
 - Oberfläche auf Deutsch und Englisch

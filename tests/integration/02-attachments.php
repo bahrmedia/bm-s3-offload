@@ -28,8 +28,13 @@ bms3o_t_settings(
 
 bms3o_t_section( 'Upload' );
 
-$name  = 'bms3o-' . wp_generate_password( 6, false, false ) . '.jpg';
-$id    = bms3o_t_import( bms3o_t_image( 3000, 2000, $name ) );
+$name      = 'bms3o-' . wp_generate_password( 6, false, false ) . '.jpg';
+$threshold = static function () {
+	return 2560; // WordPress' default; some optimisers (e.g. EWWW) switch the scaling off.
+};
+add_filter( 'big_image_size_threshold', $threshold, 999 );
+$id = bms3o_t_import( bms3o_t_image( 3000, 2000, $name ) );
+remove_filter( 'big_image_size_threshold', $threshold, 999 );
 $paths = $media->paths( $id );
 $items = $offloader->items()->get_by_source( 'attachment', $id );
 $meta  = wp_get_attachment_metadata( $id );

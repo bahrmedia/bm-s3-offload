@@ -75,6 +75,14 @@ final class Attachments {
 	private $restored = array();
 
 	/**
+	 * While > 0, attachment URLs stay local (e.g. while a plugin searches the
+	 * local URLs stored in content to replace them).
+	 *
+	 * @var int
+	 */
+	private $local_urls = 0;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param Offloader $offloader Offloader.
@@ -435,7 +443,7 @@ final class Attachments {
 	 */
 	public function offload( $attachment_id, $meta = null, $force = false, $remove_local = null ) {
 		$attachment_id = (int) $attachment_id;
-		$paths         = $this->paths( $attachment_id, $meta );
+		$paths         = $this->own_paths( $attachment_id, $this->paths( $attachment_id, $meta ) );
 		$result        = $this->offloader->upload( Items::SOURCE_POST, $attachment_id, $paths, $this->is_private( $attachment_id ), $force );
 
 		if ( ! empty( $result['errors'] ) ) {
@@ -453,6 +461,31 @@ final class Attachments {
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Leaves out paths that another attachment with the same main file has
+	 * uploaded already (shared files of media translations); they are not
+	 * uploaded twice and do not count as errors.
+	 *
+	 * @param int      $attachment_id Attachment ID.
+	 * @param string[] $paths         Relative paths.
+	 * @return string[]
+	 */
+	private function own_paths( $attachment_id, array $paths ) {
+		$sharing = null;
+		foreach ( $this->offloader->items()->get_many( $paths ) as $path => $item ) {
+			if ( Items::SOURCE_POST !== $item['source_type'] || (int) $attachment_id === (int) $item['source_id'] ) {
+				continue;
+			}
+			if ( null === $sharing ) {
+				$sharing = $this->sharing_attachments( $attachment_id );
+			}
+			if ( in_array( (int) $item['source_id'], $sharing, true ) ) {
+				$paths = array_diff( $paths, array( $path ) );
+			}
+		}
+		return array_values( $paths );
 	}
 
 	/**
@@ -621,12 +654,35 @@ final class Attachments {
 	 * @return void
 	 */
 	public function on_delete( $attachment_id ) {
+		$this->clear_retry( (int) $attachment_id );
 		$items = $this->offloader->items()->get_by_source( Items::SOURCE_POST, (int) $attachment_id );
 		if ( empty( $items ) ) {
 			return;
 		}
 
+		// Files that another attachment still uses (e.g. a media translation of WPML or
+		// Polylang) are kept: their items are handed over to that attachment.
 		$paths = array_keys( $items );
+		foreach ( $this->sharing_attachments( (int) $attachment_id ) as $other ) {
+			$shared = array_intersect( $paths, $this->paths( $other ) );
+			foreach ( $paths as $path ) {
+				// WebP/AVIF copies of shared files are shared as well (paths() lists them only for their owner).
+				if ( preg_match( '/^(.+)\.(webp|avif)$/', $path, $m ) && in_array( $m[1], $shared, true ) ) {
+					$shared[] = $path;
+				}
+			}
+			$shared = array_values( array_unique( $shared ) );
+			if ( ! empty( $shared ) && $this->offloader->items()->reassign( $shared, Items::SOURCE_POST, $other ) ) {
+				$paths = array_values( array_diff( $paths, $shared ) );
+			}
+			if ( empty( $paths ) ) {
+				break;
+			}
+		}
+		if ( empty( $paths ) ) {
+			return;
+		}
+
 		$this->offloader->unqueue_local_removal( $paths );
 
 		if ( $this->offloader->settings()->get( 'delete_remote' ) && $this->offloader->settings()->is_configured() ) {
@@ -641,7 +697,24 @@ final class Attachments {
 		}
 		// Forget remaining items: the attachment is gone.
 		$this->offloader->items()->delete( $paths );
-		$this->clear_retry( (int) $attachment_id );
+	}
+
+	/**
+	 * Other attachments that use the same main file, e.g. media translations
+	 * of WPML or Polylang.
+	 *
+	 * @param int $attachment_id Attachment ID.
+	 * @return int[] Attachment IDs, oldest first.
+	 */
+	public function sharing_attachments( $attachment_id ) {
+		global $wpdb;
+		$file = (string) get_post_meta( (int) $attachment_id, '_wp_attached_file', true );
+		if ( '' === $file ) {
+			return array();
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attached_file' AND meta_value = %s AND post_id <> %d ORDER BY post_id ASC", $file, (int) $attachment_id ) );
+		return array_map( 'intval', (array) $ids );
 	}
 
 	/**
@@ -705,6 +778,17 @@ final class Attachments {
 	 */
 
 	/**
+	 * Makes attachment URLs local (true) or delivered from the bucket again
+	 * (false). Calls can be nested.
+	 *
+	 * @param bool $local Local URLs.
+	 * @return void
+	 */
+	public function use_local_urls( $local ) {
+		$this->local_urls = max( 0, $this->local_urls + ( $local ? 1 : -1 ) );
+	}
+
+	/**
 	 * Attachment URL.
 	 *
 	 * @param string $url           Local URL.
@@ -712,6 +796,9 @@ final class Attachments {
 	 * @return string
 	 */
 	public function filter_attachment_url( $url, $attachment_id ) {
+		if ( $this->local_urls > 0 ) {
+			return $url;
+		}
 		$item = $this->main_item( (int) $attachment_id );
 		if ( ! $item || ! $this->should_rewrite( $item ) ) {
 			return $url;
@@ -732,7 +819,7 @@ final class Attachments {
 	 * @return array|false
 	 */
 	public function filter_image_downsize( $downsize, $attachment_id, $size ) {
-		if ( false !== $downsize ) {
+		if ( false !== $downsize || $this->local_urls > 0 ) {
 			return $downsize;
 		}
 
@@ -776,7 +863,7 @@ final class Attachments {
 	 * @return array
 	 */
 	public function filter_srcset( $sources, $size_array, $image_src, $image_meta, $attachment_id ) {
-		if ( ! is_array( $sources ) || empty( $sources ) ) {
+		if ( ! is_array( $sources ) || empty( $sources ) || $this->local_urls > 0 ) {
 			return $sources;
 		}
 

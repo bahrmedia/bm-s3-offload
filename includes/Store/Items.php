@@ -387,6 +387,33 @@ final class Items {
 	}
 
 	/**
+	 * Hands items over to another source (e.g. when the attachment that
+	 * uploaded a shared file is deleted while another one still uses it).
+	 *
+	 * @param string[] $paths       Relative paths.
+	 * @param string   $source_type New source type.
+	 * @param int      $source_id   New source ID.
+	 * @return bool Whether the items were updated.
+	 */
+	public function reassign( array $paths, $source_type, $source_id ) {
+		global $wpdb;
+		$paths = array_values( array_filter( array_map( 'strval', $paths ), 'strlen' ) );
+		if ( empty( $paths ) ) {
+			return true;
+		}
+		$table = self::table();
+		$ok    = true;
+		foreach ( array_chunk( $paths, 200 ) as $chunk ) {
+			$placeholders = implode( ',', array_fill( 0, count( $chunk ), '%s' ) );
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+			$ok = false !== $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET source_type = %s, source_id = %d WHERE path_hash IN ({$placeholders})", array_merge( array( (string) $source_type, (int) $source_id ), array_map( 'md5', $chunk ) ) ) ) && $ok;
+		}
+		$this->forget( $paths );
+		Counts::flush();
+		return $ok;
+	}
+
+	/**
 	 * Deletes items by path.
 	 *
 	 * @param string[] $paths Relative paths.

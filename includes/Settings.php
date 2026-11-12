@@ -226,6 +226,7 @@ final class Settings {
 
 		update_option( self::OPTION, $stored, true );
 		Counts::flush(); // The pending BuddyBoss privacy changes depend on the settings.
+		Offloader::urls_changed( array() ); // Endpoint, bucket, CDN or signing may have changed.
 		$this->flush();
 		return $errors;
 	}

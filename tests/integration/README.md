@@ -18,6 +18,10 @@ Platform and WooCommerce, MinIO as S3 server.
 | `09-counters.php` | Index for the pending counters (incl. upgrade from schema 3), existence checks with `LIMIT 1`, `has_pending()` against `remaining()`, counter cache: invalidation by items, attachments and settings, lifetime filter, tools tab |
 | `10-cleanup-safety.php` | Cleanup under slow storage and failures: delete requests end before the locks expire (also with a raised timeout), deadline of the S3 client, a lost lock does not lose a reused object (restore from the local copy, report otherwise), failed copy/upload keeps the queued deletion, claims and their expiry, database errors while queuing, repeatable migration of the legacy queue |
 | `11-file-locks.php` | Concurrent changes of the same file (a second Offloader instance acts as another request): opposite privacy changes, upload with privacy change against a privacy change, "Leave the bucket" against "Remove local copies", file lock extended before every multipart part, no request after a lost lock, no lock left behind |
+| `12-shared-files.php` | Attachments sharing a file (copy and real Polylang media translation): no second upload, not pending, deleting the original hands the items over, deleting the last one deletes the objects |
+| `13-elementor.php` | Elementor (skipped if inactive): background image in generated CSS from the bucket, CSS cache cleared after privacy change, settings save and "Leave the bucket" |
+| `14-enable-media-replace.php` | Enable Media Replace (skipped if inactive): same and new file name, with and without local copy – new files offloaded, old objects deleted, content URLs replaced and working |
+| `15-optimizers.php` | Files changed by an optimiser after the upload are uploaded again on metadata save; with EWWW: optimised files and WebP copies in the bucket |
 
 ## Running locally
 

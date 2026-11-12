@@ -43,7 +43,7 @@ jobs:
         run: ~/.composer/vendor/bin/phpcs || ~/.config/composer/vendor/bin/phpcs
 
   integration:
-    name: Integration (WP ${{ matrix.wp }}, PHP ${{ matrix.php }}${{ matrix.plugins && ', BuddyBoss + WooCommerce' || '' }})
+    name: Integration (WP ${{ matrix.wp }}, PHP ${{ matrix.php }}${{ matrix.plugins && ', with plugins' || '' }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -112,6 +112,13 @@ jobs:
           $WP plugin install /tmp/bb/buddyboss-platform-*.zip --activate
           $WP eval-file plugin/tests/integration/setup-buddyboss.php
           $WP plugin install woocommerce --activate
+          $WP rewrite flush
+
+      - name: Install Polylang, Elementor, Enable Media Replace and EWWW Image Optimizer
+        if: matrix.plugins
+        run: |
+          $WP plugin install polylang elementor enable-media-replace ewww-image-optimizer --activate
+          $WP eval-file plugin/tests/integration/setup-plugins.php
           $WP rewrite flush
 
       - name: Start web server

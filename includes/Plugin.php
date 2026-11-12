@@ -10,6 +10,8 @@ namespace BahrMedia\S3Offload;
 use BahrMedia\S3Offload\Admin\MediaLibrary;
 use BahrMedia\S3Offload\Admin\SettingsPage;
 use BahrMedia\S3Offload\Integrations\BuddyBoss;
+use BahrMedia\S3Offload\Integrations\Elementor;
+use BahrMedia\S3Offload\Integrations\EnableMediaReplace;
 use BahrMedia\S3Offload\Integrations\WooCommerce;
 use BahrMedia\S3Offload\Media\Attachments;
 use BahrMedia\S3Offload\Media\ContentRewriter;
@@ -114,6 +116,14 @@ final class Plugin {
 
 		if ( WooCommerce::is_active() ) {
 			( new WooCommerce( $this->offloader ) )->register();
+		}
+
+		if ( Elementor::is_active() ) {
+			( new Elementor() )->register();
+		}
+
+		if ( EnableMediaReplace::is_active() ) {
+			( new EnableMediaReplace( $this->attachments, $this->offloader ) )->register();
 		}
 
 		$this->bulk       = new Bulk( $this->attachments, $this->buddyboss );

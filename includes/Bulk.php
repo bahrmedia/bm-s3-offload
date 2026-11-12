@@ -194,6 +194,7 @@ final class Bulk {
 				$sql = $wpdb->prepare(
 					"SELECT p.ID FROM {$wpdb->posts} p WHERE p.post_type = 'attachment' AND p.ID > %d
 					AND NOT EXISTS ( SELECT 1 FROM {$items} i WHERE i.source_type = %s AND i.source_id = p.ID )
+					AND NOT EXISTS ( SELECT 1 FROM {$wpdb->postmeta} m JOIN {$items} s ON s.path_hash = MD5( m.meta_value ) WHERE m.post_id = p.ID AND m.meta_key = '_wp_attached_file' )
 					ORDER BY p.ID ASC LIMIT %d",
 					$cursor,
 					Items::SOURCE_POST,
@@ -263,7 +264,8 @@ final class Bulk {
 			case 'offload':
 				$sql = $wpdb->prepare(
 					"SELECT COUNT(*) FROM {$wpdb->posts} p WHERE p.post_type = 'attachment'
-					AND NOT EXISTS ( SELECT 1 FROM {$items} i WHERE i.source_type = %s AND i.source_id = p.ID )",
+					AND NOT EXISTS ( SELECT 1 FROM {$items} i WHERE i.source_type = %s AND i.source_id = p.ID )
+					AND NOT EXISTS ( SELECT 1 FROM {$wpdb->postmeta} m JOIN {$items} s ON s.path_hash = MD5( m.meta_value ) WHERE m.post_id = p.ID AND m.meta_key = '_wp_attached_file' )",
 					Items::SOURCE_POST
 				);
 				break;

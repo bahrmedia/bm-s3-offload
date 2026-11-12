@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.0.8] – 2026-11-12
+
+### Fixed
+
+- Attachments that share a file (media translations of WPML or Polylang): deleting the attachment that uploaded the file deleted the objects although other attachments still used them – without local copies the translations lost their file. The items are now handed over to the remaining attachment (WebP/AVIF copies included). The other attachments no longer try to upload the file again and no longer count as pending in *Offload existing media*.
+- *Remove local copies* did nothing while Polylang's media translation was active: Polylang blocks `wp_delete_file()` for every file that an attachment references. Local copies are now removed directly (after the object has been verified as before).
+- Elementor writes the bucket URLs of background images into its generated CSS; after a privacy change, *Leave the bucket* or a change of settings these URLs pointed to deleted or moved objects. Elementor's CSS cache is now cleared when URLs change (action `bms3o_urls_changed`).
+- Enable Media Replace: objects of the old files (other size names, or all files when replaced with a new name) stayed in the bucket and the replaced image remained reachable under its old URLs; when replacing with a new name, the URLs in content were not replaced because EMR searched for bucket URLs while content stores local ones. During a replacement attachment URLs now stay local, and afterwards the objects of old files are deleted.
+- Deleting an attachment that had no items of its own left its entry in the retry list.
+
+### Changed
+
+- The integration tests also run with Polylang, Elementor, Enable Media Replace and EWWW Image Optimizer (new tests 12–15).
+
 ## [1.0.7] – 2026-11-12
 
 ### Fixed

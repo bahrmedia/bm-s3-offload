@@ -149,7 +149,7 @@ bms3o_t( empty( $errors ) && array() === $removed && is_file( $local ), 'The con
 
 if ( method_exists( Offloader::class, 'delete_remote' ) && ( new ReflectionMethod( Offloader::class, 'delete_remote' ) )->getNumberOfParameters() > 1 ) {
 	$offloader->upload( Items::SOURCE_POST, $id, $paths, false, true );
-	wp_delete_file( $local );
+	unlink( $local ); // Not wp_delete_file(): Polylang may keep files that attachments reference.
 	$errors = $offloader->delete_remote( $paths, true );
 	bms3o_t( isset( $errors[ $file ] ) && bms3o_t_item_object_exists( $file ), 'With a missing local copy, "Leave the bucket" keeps the object', $errors );
 	$offloader->download( $paths );

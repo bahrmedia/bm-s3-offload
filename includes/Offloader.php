@@ -387,6 +387,9 @@ final class Offloader {
 				}
 
 				$result['uploaded'][] = $path;
+				if ( $item && ( $item['bucket'] !== $bucket || $item['object_key'] !== $key ) ) {
+					self::urls_changed( array( $path ) );
+				}
 
 				/**
 				 * Fires after a file has been uploaded to the bucket.
@@ -549,7 +552,12 @@ final class Offloader {
 					}
 				}
 
-				wp_delete_file( $file );
+				// Not wp_delete_file(): plugins use its filter to keep files that other
+				// attachments still reference (e.g. Polylang's media translation), which
+				// would silently keep every local copy. The object is verified above, so
+				// only the local copy goes; the file itself stays in use.
+				@unlink( $file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink, WordPress.PHP.NoSilencedErrors.Discouraged
+				clearstatcache( true, $file );
 				if ( ! is_file( $file ) ) {
 					$this->items->set_local_removed( array( $path ), true );
 					$removed[] = $path;
@@ -695,7 +703,11 @@ final class Offloader {
 				}
 			}
 
-			$this->items->delete( array_diff( array_keys( $items ), array_keys( $errors ) ) );
+			$deleted = array_values( array_diff( array_keys( $items ), array_keys( $errors ) ) );
+			$this->items->delete( $deleted );
+			if ( ! empty( $deleted ) ) {
+				self::urls_changed( $deleted );
+			}
 		} finally {
 			foreach ( $locked as $path ) {
 				$this->unlock_path( $path );
@@ -764,6 +776,7 @@ final class Offloader {
 					$errors[ $path ] = __( 'The new state could not be recorded in the database.', 'bm-s3-offload' );
 					continue;
 				}
+				self::urls_changed( array( $path ) );
 
 				// A leftover public copy would stay readable: report it and retry hourly.
 				if ( $old_key !== $key && $this->owns_key( $old_key ) ) {
@@ -943,6 +956,23 @@ final class Offloader {
 		}
 		Lock::release( self::path_lock( $path ), $this->path_locks[ $path ]['token'] );
 		unset( $this->path_locks[ $path ] );
+	}
+
+	/**
+	 * Announces that the URLs of files changed (their object moved or was
+	 * deleted), e.g. for caches that contain URLs.
+	 *
+	 * @param string[] $paths Relative paths; empty if all URLs may have changed.
+	 * @return void
+	 */
+	public static function urls_changed( array $paths ) {
+		/**
+		 * Fires when the URLs of files changed: their object moved to another key or
+		 * was deleted from the bucket, or a setting changed that affects all URLs.
+		 *
+		 * @param string[] $paths Relative paths; empty if all URLs may have changed.
+		 */
+		do_action( 'bms3o_urls_changed', $paths );
 	}
 
 	/**
