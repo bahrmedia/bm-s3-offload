@@ -13,7 +13,7 @@ if ( function_exists( 'PLL' ) ) {
 	);
 	foreach ( $bms3o_languages as $bms3o_order => $bms3o_language ) {
 		if ( ! PLL()->model->get_language( $bms3o_language[1] ) ) {
-			PLL()->model->languages->add(
+			$bms3o_result = PLL()->model->languages->add(
 				array(
 					'name'       => $bms3o_language[0],
 					'slug'       => $bms3o_language[1],
@@ -22,9 +22,13 @@ if ( function_exists( 'PLL' ) ) {
 					'term_group' => $bms3o_order,
 				)
 			);
+			echo 'Polylang language ' . esc_html( $bms3o_language[1] ) . ': ' . ( is_wp_error( $bms3o_result ) ? esc_html( $bms3o_result->get_error_message() ) : 'added' ) . "\n";
 		}
 	}
-	$bms3o_options                  = get_option( 'polylang' );
-	$bms3o_options['media_support'] = true;
-	update_option( 'polylang', $bms3o_options );
+	// Through Polylang's options object: it writes its values back at the end of the request.
+	PLL()->options['media_support'] = true;
+	if ( method_exists( PLL()->options, 'save' ) ) {
+		PLL()->options->save();
+	}
+	echo 'Polylang languages: ' . esc_html( implode( ',', wp_list_pluck( PLL()->model->get_languages_list(), 'slug' ) ) ) . ', media translation: ' . ( PLL()->options['media_support'] ? 'on' : 'off' ) . "\n";
 }

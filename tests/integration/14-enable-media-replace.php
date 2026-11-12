@@ -42,9 +42,10 @@ $cases = array(
 	array( 'replace_and_search', true ),
 );
 foreach ( $cases as $case ) {
-	list( $mode, $removed ) = $case;
-	$label = ( 'replace' === $mode ? 'Same name' : 'New name' ) . ( $removed ? ', without local copy' : ', with local copy' );
-	$name  = 'emr-' . wp_generate_password( 6, false, false );
+	$mode    = $case[0];
+	$removed = $case[1];
+	$label   = ( 'replace' === $mode ? 'Same name' : 'New name' ) . ( $removed ? ', without local copy' : ', with local copy' );
+	$name    = 'emr-' . wp_generate_password( 6, false, false );
 
 	$id        = bms3o_t_import( bms3o_t_image( 1200, 800, $name . '.png' ) );
 	$old_paths = $media->paths( $id );

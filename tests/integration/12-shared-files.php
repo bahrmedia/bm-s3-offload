@@ -43,7 +43,7 @@ function bms3o_t_shared_pair( $original, $translation, $label ) {
 	$paths     = $media->paths( $original );
 	$keys      = wp_list_pluck( $offloader->items()->get_many( $paths ), 'object_key' );
 
-	bms3o_t( $file === get_post_meta( $translation, '_wp_attached_file', true ), "{$label}: both attachments use the same file" );
+	bms3o_t( get_post_meta( $translation, '_wp_attached_file', true ) === $file, "{$label}: both attachments use the same file" );
 	bms3o_t( ! in_array( $translation, $media->pending_retries(), true ), "{$label}: the second attachment causes no upload error", $media->pending_retries() );
 	bms3o_t( 0 !== strpos( wp_get_attachment_url( $translation ), home_url() ), "{$label}: the second attachment is served from the bucket", wp_get_attachment_url( $translation ) );
 

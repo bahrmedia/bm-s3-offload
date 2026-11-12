@@ -405,7 +405,7 @@ final class Items {
 		$ok    = true;
 		foreach ( array_chunk( $paths, 200 ) as $chunk ) {
 			$placeholders = implode( ',', array_fill( 0, count( $chunk ), '%s' ) );
-			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare,WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber
 			$ok = false !== $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET source_type = %s, source_id = %d WHERE path_hash IN ({$placeholders})", array_merge( array( (string) $source_type, (int) $source_id ), array_map( 'md5', $chunk ) ) ) ) && $ok;
 		}
 		$this->forget( $paths );

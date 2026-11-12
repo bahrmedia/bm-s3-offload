@@ -57,7 +57,7 @@ function bms3o_t_out_of_sync( $id ) {
 		$item = $plugin->offloader->items()->get( $path );
 		clearstatcache( true, $file );
 		$head = $item ? $plugin->settings->client()->head( $item['object_key'] ) : null;
-		if ( ! is_file( $file ) || ! $head || (int) $head['content-length'] !== (int) filesize( $file ) ) {
+		if ( ! is_file( $file ) || ! $head || (int) filesize( $file ) !== (int) $head['content-length'] ) {
 			$differ[] = $path;
 		}
 	}
