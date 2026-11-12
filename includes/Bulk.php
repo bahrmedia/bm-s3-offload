@@ -121,7 +121,7 @@ final class Bulk {
 		return array(
 			'cursor'    => $last,
 			'processed' => $done,
-			'done'      => $done === count( $ids ) && count( $ids ) < $limit,
+			'done'      => count( $ids ) === $done && count( $ids ) < $limit,
 			'errors'    => $errors,
 		);
 	}
