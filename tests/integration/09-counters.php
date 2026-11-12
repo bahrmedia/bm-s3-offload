@@ -150,7 +150,7 @@ ob_end_clean();
 $cached = get_transient( Counts::TRANSIENT );
 bms3o_t( is_array( $cached ) && isset( $cached['stats'], $cached['remaining_offload'], $cached['remaining_download'] ), 'Rendering fills the cache', is_array( $cached ) ? array_keys( $cached ) : $cached );
 
-$cached['stats']['files']       = 987654;
+$cached['stats']['files']      = 987654;
 $cached['remaining_unoffload'] = 123456;
 set_transient( Counts::TRANSIENT, $cached, 60 );
 ob_start();
