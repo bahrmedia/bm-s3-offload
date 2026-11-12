@@ -715,6 +715,12 @@ final class SettingsPage {
 			echo '<div class="notice notice-error"><p>' . esc_html( $storage_error ) . '</p></div>';
 		}
 
+		if ( $screen && in_array( $screen->id, array( 'dashboard', 'plugins', 'upload', 'media_page_' . self::SLUG ), true ) ) {
+			foreach ( $this->plugin->attachments->undeliverable_warnings() as $warning ) {
+				echo '<div class="notice notice-warning"><p>' . esc_html( $warning ) . '</p></div>';
+			}
+		}
+
 		if ( $this->plugin->settings->secret_unreadable() ) {
 			echo '<div class="notice notice-error"><p>';
 			printf(

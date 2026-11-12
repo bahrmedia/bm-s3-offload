@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Admin notice when WooCommerce downloads or BuddyBoss media exist only in the bucket while their integration is inactive or switched off (they cannot be delivered then), with the way out: switch the integration on or restore the local copies.
+
 ## [1.0.1] – 2026-11-12
 
 ### Fixed

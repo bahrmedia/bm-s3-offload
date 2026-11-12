@@ -258,6 +258,19 @@ final class Items {
 	}
 
 	/**
+	 * Number of files below a path prefix that exist only in the bucket.
+	 *
+	 * @param string $prefix Path prefix.
+	 * @return int
+	 */
+	public function count_bucket_only( $prefix ) {
+		global $wpdb;
+		$table = self::table();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery
+		return (int) $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table} WHERE path LIKE %s AND local_removed = 1", $wpdb->esc_like( $prefix ) . '%' ) );
+	}
+
+	/**
 	 * Items ordered by ID, for iterating over the whole table.
 	 *
 	 * @param int $after_id Return items with a larger ID.

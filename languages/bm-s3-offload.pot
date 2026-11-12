@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-12T07:15:39+00:00\n"
+"POT-Creation-Date: 2026-11-12T07:54:41+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: bm-s3-offload\n"
@@ -94,7 +94,7 @@ msgid "All storage states"
 msgstr ""
 
 #: includes/Admin/MediaLibrary.php:150
-#: includes/Admin/SettingsPage.php:223
+#: includes/Admin/SettingsPage.php:213
 msgid "Bucket"
 msgstr ""
 
@@ -110,8 +110,8 @@ msgid "private"
 msgstr ""
 
 #: includes/Admin/MediaLibrary.php:292
-#: includes/Admin/SettingsPage.php:412
-#: includes/Admin/SettingsPage.php:573
+#: includes/Admin/SettingsPage.php:422
+#: includes/Admin/SettingsPage.php:583
 msgid "You are not allowed to do this."
 msgstr ""
 
@@ -153,7 +153,7 @@ msgid "Stopped."
 msgstr ""
 
 #: includes/Admin/SettingsPage.php:126
-#: includes/Admin/SettingsPage.php:475
+#: includes/Admin/SettingsPage.php:485
 msgid "Stop"
 msgstr ""
 
@@ -205,399 +205,399 @@ msgstr ""
 msgid "Without bucket name. Replace placeholders like {account} with your values."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:214
-msgid "Change of storage"
-msgstr ""
-
-#: includes/Admin/SettingsPage.php:216
-msgid "All objects have been copied to the new endpoint (e.g. with rclone)."
-msgstr ""
-
-#: includes/Admin/SettingsPage.php:217
-msgid "Files are offloaded to the current endpoint. A new endpoint is only accepted with this confirmation. Afterwards check the new storage with \"wp bm-s3 verify\"."
-msgstr ""
-
-#: includes/Admin/SettingsPage.php:222
+#: includes/Admin/SettingsPage.php:212
 msgid "Region"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:224
+#: includes/Admin/SettingsPage.php:214
 msgid "Access key ID"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:225
+#: includes/Admin/SettingsPage.php:215
 msgid "Secret access key"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:225
+#: includes/Admin/SettingsPage.php:215
 msgid "Stored encrypted. Most secure: define BMS3O_SECRET_KEY in wp-config.php."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:226
+#: includes/Admin/SettingsPage.php:216
 msgid "Path-style URLs"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:226
+#: includes/Admin/SettingsPage.php:216
 msgid "Use endpoint/bucket/key instead of bucket.endpoint/key (required by MinIO and some providers)."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:227
+#: includes/Admin/SettingsPage.php:217
 msgid "Object prefix"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:227
+#: includes/Admin/SettingsPage.php:217
 msgid "Prepended to every object key, e.g. \"wp-content/uploads/\". Use a different prefix per site when several sites share a bucket."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:228
+#: includes/Admin/SettingsPage.php:218
 msgid "Private prefix"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:228
+#: includes/Admin/SettingsPage.php:218
 msgid "Private files are stored below this prefix. Only the object prefix may be publicly readable in your bucket policy."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:231
+#: includes/Admin/SettingsPage.php:221
 msgid "Object ACL"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:235
+#: includes/Admin/SettingsPage.php:225
 msgid "None (bucket policy decides – recommended)"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:236
+#: includes/Admin/SettingsPage.php:226
 msgid "public-read for public files, private for private files"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:238
+#: includes/Admin/SettingsPage.php:228
 msgid "Only for buckets that use ACLs. Many providers have ACLs disabled."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:241
+#: includes/Admin/SettingsPage.php:231
 msgid "Cache-Control"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:245
+#: includes/Admin/SettingsPage.php:235
 msgid "Behaviour"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:248
+#: includes/Admin/SettingsPage.php:238
 msgid "Offload new uploads"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:248
+#: includes/Admin/SettingsPage.php:238
 msgid "Copy new and edited media to the bucket automatically."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:249
-#: includes/Admin/SettingsPage.php:481
-#: includes/Admin/SettingsPage.php:660
+#: includes/Admin/SettingsPage.php:239
+#: includes/Admin/SettingsPage.php:491
+#: includes/Admin/SettingsPage.php:670
 msgid "Remove local copies"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:249
+#: includes/Admin/SettingsPage.php:239
 msgid "Delete files from this server after a successful upload. Files are restored automatically when needed (image editor, thumbnail regeneration)."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:250
+#: includes/Admin/SettingsPage.php:240
 msgid "Delete from bucket"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:250
+#: includes/Admin/SettingsPage.php:240
 msgid "Delete objects when the media item is deleted in WordPress."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:254
+#: includes/Admin/SettingsPage.php:244
 msgid "Delivery"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:257
+#: includes/Admin/SettingsPage.php:247
 msgid "Serve from bucket"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:257
+#: includes/Admin/SettingsPage.php:247
 msgid "Rewrite media URLs to the bucket or CDN. Files without local copy are always served from the bucket."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:260
+#: includes/Admin/SettingsPage.php:250
 msgid "CDN / custom domain"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:264
+#: includes/Admin/SettingsPage.php:254
 msgid "Optional. Must point to the bucket root (the object key is appended). Signed URLs always use the endpoint."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:269
+#: includes/Admin/SettingsPage.php:259
 msgid "CDN for CSS and JavaScript"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:273
+#: includes/Admin/SettingsPage.php:263
 msgid "Optional. A pull CDN whose origin is this website. Scripts and styles of themes, plugins and WordPress are then loaded from it (front end only)."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:276
+#: includes/Admin/SettingsPage.php:266
 msgid "Signed URLs for all files"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:276
+#: includes/Admin/SettingsPage.php:266
 msgid "Use a completely private bucket and deliver every file with a pre-signed URL."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:279
+#: includes/Admin/SettingsPage.php:269
 msgid "Signed URL lifetime"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:284
+#: includes/Admin/SettingsPage.php:274
 msgid "Seconds (60–604800). URLs stay identical for half of this time so browsers can cache them."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:290
+#: includes/Admin/SettingsPage.php:280
 msgid "BuddyBoss"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:292
+#: includes/Admin/SettingsPage.php:282
 msgid "BuddyBoss Platform is not active. These settings take effect once it is."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:296
+#: includes/Admin/SettingsPage.php:286
 msgid "Integration"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:296
+#: includes/Admin/SettingsPage.php:286
 msgid "Offload BuddyBoss photos, documents and videos and deliver them from the bucket."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:297
+#: includes/Admin/SettingsPage.php:287
 msgid "Private media"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:297
+#: includes/Admin/SettingsPage.php:287
 msgid "Store BuddyBoss media as private objects (recommended – respects BuddyBoss privacy settings)."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:300
+#: includes/Admin/SettingsPage.php:290
 msgid "Photo delivery"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:304
+#: includes/Admin/SettingsPage.php:294
 msgid "Via BuddyBoss preview URL with access check (stable links, recommended)"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:305
+#: includes/Admin/SettingsPage.php:295
 msgid "Signed bucket URL in the page (faster, links expire)"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:307
+#: includes/Admin/SettingsPage.php:297
 msgid "With the preview URL, every request is checked against BuddyBoss privacy and redirected to a short-lived signed URL. Links in e-mails keep working."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:310
+#: includes/Admin/SettingsPage.php:300
 msgid "Avatars and cover images"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:310
+#: includes/Admin/SettingsPage.php:300
 msgid "Mirror member and group avatars and cover images to the bucket and serve them from there (local copies are kept)."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:314
+#: includes/Admin/SettingsPage.php:304
 msgid "Integrations"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:317
+#: includes/Admin/SettingsPage.php:307
 msgid "WooCommerce"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:317
+#: includes/Admin/SettingsPage.php:307
 msgid "Deliver downloadable products from the bucket: after WooCommerce has checked the order, customers are redirected to a short-lived signed URL."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:321
+#: includes/Admin/SettingsPage.php:311
 msgid "Uninstall"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:323
+#: includes/Admin/SettingsPage.php:313
 msgid "Remove data"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:323
+#: includes/Admin/SettingsPage.php:313
 msgid "Delete settings and the offload table when the plugin is deleted. Objects in the bucket are never deleted. Nothing is removed while files exist only in the bucket – run \"Leave the bucket\" first."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:371
+#: includes/Admin/SettingsPage.php:361
 msgid "•••••••• (saved – leave empty to keep)"
 msgstr ""
 
 #. translators: %s: constant name
-#: includes/Admin/SettingsPage.php:393
+#: includes/Admin/SettingsPage.php:383
 #, php-format
 msgid "Defined by %s."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:425
+#: includes/Admin/SettingsPage.php:406
+msgid "Change of storage"
+msgstr ""
+
+#: includes/Admin/SettingsPage.php:408
+msgid "All objects have been copied to the new endpoint (e.g. with rclone)."
+msgstr ""
+
+#: includes/Admin/SettingsPage.php:409
+msgid "Files are offloaded to the current endpoint. A new endpoint is only accepted with this confirmation. Afterwards check the new storage with \"wp bm-s3 verify\"."
+msgstr ""
+
+#: includes/Admin/SettingsPage.php:435
 msgid "Existing BuddyBoss media could not be made private yet because another background operation is running. Start \"Apply BuddyBoss privacy setting\" in the tools tab afterwards."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:428
+#: includes/Admin/SettingsPage.php:438
 msgid "Existing BuddyBoss media stay private until you run \"Apply BuddyBoss privacy setting\" in the tools tab. That makes them publicly readable for anyone who knows the address."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:454
+#: includes/Admin/SettingsPage.php:464
 msgid "Status"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:457
+#: includes/Admin/SettingsPage.php:467
 msgid "Offloaded files"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:458
+#: includes/Admin/SettingsPage.php:468
 msgid "Size in bucket"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:459
+#: includes/Admin/SettingsPage.php:469
 msgid "Without local copy"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:460
+#: includes/Admin/SettingsPage.php:470
 msgid "Private files"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:461
+#: includes/Admin/SettingsPage.php:471
 msgid "Waiting for retry"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:465
+#: includes/Admin/SettingsPage.php:475
 msgid "Connection test"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:466
+#: includes/Admin/SettingsPage.php:476
 msgid "Uploads, reads and deletes a small test file and checks public and private delivery."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:467
+#: includes/Admin/SettingsPage.php:477
 msgid "Run connection test"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:470
+#: includes/Admin/SettingsPage.php:480
 msgid "Bulk operations"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:471
+#: includes/Admin/SettingsPage.php:481
 msgid "Run an operation in this browser window (keep the page open) or in the background (WP-Cron; you can close the page). For very large libraries, WP-CLI is fastest: wp bm-s3"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:480
-#: includes/Admin/SettingsPage.php:659
+#: includes/Admin/SettingsPage.php:490
+#: includes/Admin/SettingsPage.php:669
 msgid "Offload existing media"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:480
+#: includes/Admin/SettingsPage.php:490
 msgid "Uploads all media that are not in the bucket yet."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:481
+#: includes/Admin/SettingsPage.php:491
 msgid "Deletes local copies of offloaded media after verifying each object in the bucket."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:482
-#: includes/Admin/SettingsPage.php:661
+#: includes/Admin/SettingsPage.php:492
+#: includes/Admin/SettingsPage.php:671
 msgid "Restore local copies"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:482
+#: includes/Admin/SettingsPage.php:492
 msgid "Downloads all files that only exist in the bucket back to this server."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:484
-#: includes/Admin/SettingsPage.php:664
+#: includes/Admin/SettingsPage.php:494
+#: includes/Admin/SettingsPage.php:674
 msgid "Apply BuddyBoss privacy setting"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:484
+#: includes/Admin/SettingsPage.php:494
 msgid "Moves existing BuddyBoss media to the private or public area according to the \"private media\" setting."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:487
-#: includes/Admin/SettingsPage.php:662
+#: includes/Admin/SettingsPage.php:497
+#: includes/Admin/SettingsPage.php:672
 msgid "BuddyBoss avatars and covers"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:487
+#: includes/Admin/SettingsPage.php:497
 msgid "Mirrors all existing member and group avatars and cover images to the bucket."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:489
-#: includes/Admin/SettingsPage.php:663
+#: includes/Admin/SettingsPage.php:499
+#: includes/Admin/SettingsPage.php:673
 msgid "Leave the bucket"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:489
+#: includes/Admin/SettingsPage.php:499
 msgid "Restores every file locally and deletes it from the bucket. Use this before switching providers or uninstalling."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:493
+#: includes/Admin/SettingsPage.php:503
 msgid "Bucket policy"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:494
+#: includes/Admin/SettingsPage.php:504
 msgid "Example policy that makes only the public prefix readable. Private files and everything else stay protected."
 msgstr ""
 
 #. translators: %s: number of items
-#: includes/Admin/SettingsPage.php:520
+#: includes/Admin/SettingsPage.php:530
 #, php-format
 msgid "Pending: %s"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:524
+#: includes/Admin/SettingsPage.php:534
 msgid "Remove local copies afterwards"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:529
+#: includes/Admin/SettingsPage.php:539
 msgid "Start"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:530
+#: includes/Admin/SettingsPage.php:540
 msgid "Run in background"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:598
-#: includes/Admin/SettingsPage.php:633
+#: includes/Admin/SettingsPage.php:608
+#: includes/Admin/SettingsPage.php:643
 msgid "Invalid request."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:636
+#: includes/Admin/SettingsPage.php:646
 msgid "Another background operation is running."
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:693
+#: includes/Admin/SettingsPage.php:703
 msgid "Settings saved with notes:"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:699
+#: includes/Admin/SettingsPage.php:709
 msgid "Settings saved."
 msgstr ""
 
 #. translators: %s: link to the settings
-#: includes/Admin/SettingsPage.php:712
+#: includes/Admin/SettingsPage.php:728
 #, php-format
 msgid "BM S3 Offload cannot decrypt the stored secret key, probably because the WordPress security keys (salts) were changed. Offloading is paused. %s"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:713
+#: includes/Admin/SettingsPage.php:729
 msgid "Enter the secret key again"
 msgstr ""
 
 #. translators: %s: link to the settings
-#: includes/Admin/SettingsPage.php:722
+#: includes/Admin/SettingsPage.php:738
 #, php-format
 msgid "BM S3 Offload is not configured yet. %s"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:723
+#: includes/Admin/SettingsPage.php:739
 msgid "Configure the bucket"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:729
+#: includes/Admin/SettingsPage.php:745
 msgid "The PHP extension SimpleXML is missing. Listing objects and error messages from the bucket will not work."
 msgstr ""
 
@@ -607,7 +607,23 @@ msgstr ""
 msgid "Errors while synchronising %s"
 msgstr ""
 
-#: includes/Media/Attachments.php:304
+#: includes/Media/Attachments.php:265
+msgid "WooCommerce downloads"
+msgstr ""
+
+#: includes/Media/Attachments.php:270
+msgid "BuddyBoss media"
+msgstr ""
+
+#. translators: 1: number of files, 2: e.g. "WooCommerce downloads"
+#: includes/Media/Attachments.php:313
+#, php-format
+msgid "%1$d file of the %2$s exists only in the bucket, but the integration is inactive or switched off, so it cannot be delivered. Switch the integration on or run \"Restore local copies\" in the tools tab."
+msgid_plural "%1$d files of the %2$s exist only in the bucket, but the integration is inactive or switched off, so they cannot be delivered. Switch the integration on or run \"Restore local copies\" in the tools tab."
+msgstr[0] ""
+msgstr[1] ""
+
+#: includes/Media/Attachments.php:379
 msgid "Files in protected directories (BuddyBoss, WooCommerce, Easy Digital Downloads) cannot be made public."
 msgstr ""
 
