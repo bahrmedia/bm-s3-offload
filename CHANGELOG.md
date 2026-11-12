@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file. The format foll
 
 ## [Unreleased]
 
+### Added
+
+- Admin notice when WooCommerce downloads or BuddyBoss media exist only in the bucket while their integration is inactive or switched off (they cannot be delivered then), with the way out: switch the integration on or restore the local copies.
+
 ### Changed
 
 - Bulk operations in the browser process batches until a time budget of 20 seconds per request is used up (at most half of `max_execution_time`) instead of a fixed 10 items, so fewer requests are needed for small files and large files do not run into timeouts. Filter `bms3o_bulk_time_limit`.

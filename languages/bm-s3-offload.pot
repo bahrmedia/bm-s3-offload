@@ -9,7 +9,7 @@ msgstr ""
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-12T08:31:50+00:00\n"
+"POT-Creation-Date: 2026-11-12T08:39:21+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: bm-s3-offload\n"
@@ -584,26 +584,26 @@ msgid "Settings saved."
 msgstr ""
 
 #. translators: %s: link to the settings
-#: includes/Admin/SettingsPage.php:781
+#: includes/Admin/SettingsPage.php:787
 #, php-format
 msgid "BM S3 Offload cannot decrypt the stored secret key, probably because the WordPress security keys (salts) were changed. Offloading is paused. %s"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:782
+#: includes/Admin/SettingsPage.php:788
 msgid "Enter the secret key again"
 msgstr ""
 
 #. translators: %s: link to the settings
-#: includes/Admin/SettingsPage.php:791
+#: includes/Admin/SettingsPage.php:797
 #, php-format
 msgid "BM S3 Offload is not configured yet. %s"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:792
+#: includes/Admin/SettingsPage.php:798
 msgid "Configure the bucket"
 msgstr ""
 
-#: includes/Admin/SettingsPage.php:798
+#: includes/Admin/SettingsPage.php:804
 msgid "The PHP extension SimpleXML is missing. Listing objects and error messages from the bucket will not work."
 msgstr ""
 
@@ -613,7 +613,23 @@ msgstr ""
 msgid "Errors while synchronising %s"
 msgstr ""
 
-#: includes/Media/Attachments.php:306
+#: includes/Media/Attachments.php:265
+msgid "WooCommerce downloads"
+msgstr ""
+
+#: includes/Media/Attachments.php:270
+msgid "BuddyBoss media"
+msgstr ""
+
+#. translators: 1: number of files, 2: e.g. "WooCommerce downloads"
+#: includes/Media/Attachments.php:313
+#, php-format
+msgid "%1$d file of the %2$s exists only in the bucket, but the integration is inactive or switched off, so it cannot be delivered. Switch the integration on or run \"Restore local copies\" in the tools tab."
+msgid_plural "%1$d files of the %2$s exist only in the bucket, but the integration is inactive or switched off, so they cannot be delivered. Switch the integration on or run \"Restore local copies\" in the tools tab."
+msgstr[0] ""
+msgstr[1] ""
+
+#: includes/Media/Attachments.php:379
 msgid "Files in protected directories (BuddyBoss, WooCommerce, Easy Digital Downloads) cannot be made public."
 msgstr ""
 

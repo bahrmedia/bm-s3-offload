@@ -252,6 +252,79 @@ final class Attachments {
 	}
 
 	/**
+	 * Directories of plugins whose files are only delivered from the bucket by
+	 * the matching integration, with a label for notices.
+	 *
+	 * @return array<string,array{dirs:string[],label:string,active:bool}>
+	 */
+	public function integration_dirs() {
+		$settings = $this->offloader->settings();
+		return array(
+			'woocommerce' => array(
+				'dirs'   => array( 'woocommerce_uploads/' ),
+				'label'  => __( 'WooCommerce downloads', 'bm-s3-offload' ),
+				'active' => WooCommerce::is_active() && (bool) $settings->get( 'wc_enabled' ),
+			),
+			'buddyboss'   => array(
+				'dirs'   => array( 'bb_medias/', 'bb_documents/', 'bb_videos/' ),
+				'label'  => __( 'BuddyBoss media', 'bm-s3-offload' ),
+				'active' => BuddyBoss::is_active() && (bool) $settings->get( 'bb_enabled' ),
+			),
+		);
+	}
+
+	/**
+	 * Whether a file can be delivered while its local copy is missing: always,
+	 * except for directories whose integration is inactive or switched off.
+	 *
+	 * @param string $path Relative path.
+	 * @return bool
+	 */
+	public function delivered_from_bucket( $path ) {
+		foreach ( $this->integration_dirs() as $integration ) {
+			foreach ( $integration['dirs'] as $dir ) {
+				if ( 0 === strpos( (string) $path, $dir ) ) {
+					return $integration['active'];
+				}
+			}
+		}
+		return true;
+	}
+
+	/**
+	 * Warnings about files that exist only in the bucket although their
+	 * integration is inactive (they cannot be delivered then).
+	 *
+	 * @return string[]
+	 */
+	public function undeliverable_warnings() {
+		$warnings = array();
+		foreach ( $this->integration_dirs() as $integration ) {
+			if ( $integration['active'] ) {
+				continue;
+			}
+			$count = 0;
+			foreach ( $integration['dirs'] as $dir ) {
+				$count += $this->offloader->items()->count_bucket_only( $dir );
+			}
+			if ( $count > 0 ) {
+				$warnings[] = sprintf(
+					/* translators: 1: number of files, 2: e.g. "WooCommerce downloads" */
+					_n(
+						'%1$d file of the %2$s exists only in the bucket, but the integration is inactive or switched off, so it cannot be delivered. Switch the integration on or run "Restore local copies" in the tools tab.',
+						'%1$d files of the %2$s exist only in the bucket, but the integration is inactive or switched off, so they cannot be delivered. Switch the integration on or run "Restore local copies" in the tools tab.',
+						$count,
+						'bm-s3-offload'
+					),
+					$count,
+					$integration['label']
+				);
+			}
+		}
+		return $warnings;
+	}
+
+	/**
 	 * Only files in protected directories need an access check; other private
 	 * media are delivered with expiring signed URLs.
 	 *
@@ -422,11 +495,7 @@ final class Attachments {
 
 		// Protected files are only delivered from the bucket by the matching integration.
 		// Without it, the owning plugin serves the local file: keep it.
-		$settings = $this->offloader->settings();
-		if ( 0 === strpos( $file, 'woocommerce_uploads/' ) && ! ( WooCommerce::is_active() && $settings->get( 'wc_enabled' ) ) ) {
-			$allowed = false;
-		}
-		if ( preg_match( '#^bb_(medias|documents|videos)/#', $file ) && ! ( BuddyBoss::is_active() && $settings->get( 'bb_enabled' ) ) ) {
+		if ( ! $this->delivered_from_bucket( $file ) ) {
 			$allowed = false;
 		}
 

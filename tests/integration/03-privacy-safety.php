@@ -85,6 +85,16 @@ $bb_delivery = BahrMedia\S3Offload\Integrations\BuddyBoss::is_active() && $plugi
 bms3o_t( $bb_delivery === $media->can_remove_local( $bb_photo ), 'BuddyBoss media keep local copies unless the BuddyBoss integration delivers them' );
 bms3o_t_settings( array( 'bb_enabled' => false ) );
 bms3o_t( ! $media->can_remove_local( $bb_photo ), 'BuddyBoss integration off: local copies are kept' );
+
+// Files removed earlier (while the integration was on) cannot be delivered now: notice.
+$offloader->items()->set_local_removed( array( 'woocommerce_uploads/bms3o-test/product.png' ), true );
+$warnings = implode( ' ', $media->undeliverable_warnings() );
+bms3o_t( false !== strpos( $warnings, 'WooCommerce' ), 'Notice for shop downloads that exist only in the bucket while the integration is off', $warnings );
+bms3o_t_settings( array( 'wc_enabled' => true ) );
+$warnings = implode( ' ', $media->undeliverable_warnings() );
+bms3o_t( BahrMedia\S3Offload\Integrations\WooCommerce::is_active() === ( false === strpos( $warnings, 'WooCommerce' ) ), 'No notice while WooCommerce delivers them', $warnings );
+$offloader->items()->set_local_removed( array( 'woocommerce_uploads/bms3o-test/product.png' ), false );
+bms3o_t( false === strpos( implode( ' ', $media->undeliverable_warnings() ), 'WooCommerce' ), 'No notice when the local copy exists' );
 wp_delete_attachment( $bb_photo, true );
 bms3o_t_settings(
 	array(
