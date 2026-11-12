@@ -85,7 +85,13 @@ update_option( 'bms3o_retry', array( $id => 0 ), false );
 $other  = 999999;
 $inject = static function () use ( $id, $other ) {
 	// Another request adds an entry while the retry uploads.
-	bms3o_t_write_elsewhere( 'bms3o_retry', array( $id => 0, $other => 2 ) );
+	bms3o_t_write_elsewhere(
+		'bms3o_retry',
+		array(
+			$id    => 0,
+			$other => 2,
+		)
+	);
 };
 add_action( 'bms3o_uploaded', $inject );
 $media->retry_failed();
@@ -107,7 +113,7 @@ $add = new ReflectionMethod( $media, 'add_retry' );
 $add->setAccessible( true );
 $add->invoke( $media, $id );
 $waited = microtime( true ) - $start;
-$retry = bms3o_t_read_db( 'bms3o_retry' );
+$retry  = bms3o_t_read_db( 'bms3o_retry' );
 bms3o_t( $waited >= 1.0 && isset( $retry[ $id ], $retry[ $other ] ), 'Adding an entry waits for the lock and keeps the other entries', array( round( $waited, 2 ), $retry ) );
 \BahrMedia\S3Offload\Lock::release( 'bms3o_retry_lock', $token );
 bms3o_t( ! \BahrMedia\S3Offload\Lock::is_locked( 'bms3o_retry_lock' ), 'The lock is released afterwards' );
