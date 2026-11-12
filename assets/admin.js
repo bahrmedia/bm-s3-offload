@@ -156,6 +156,7 @@
 		function step( cursor, attempt ) {
 			attempt = attempt || 0;
 			if ( ! running ) {
+				update();
 				finish( config.i18n.stopped );
 				return;
 			}
