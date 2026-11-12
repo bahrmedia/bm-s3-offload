@@ -2,14 +2,14 @@
 # This file is distributed under the GPL-2.0-or-later.
 msgid ""
 msgstr ""
-"Project-Id-Version: BM S3 Offload 1.0.6\n"
+"Project-Id-Version: BM S3 Offload 1.0.7\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/bm-s3-offload\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"POT-Creation-Date: 2026-11-12T13:35:41+00:00\n"
+"POT-Creation-Date: 2026-11-12T13:58:46+00:00\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "X-Generator: WP-CLI 2.12.0\n"
 "X-Domain: bm-s3-offload\n"
@@ -653,81 +653,89 @@ msgstr[1] ""
 msgid "Files in protected directories (BuddyBoss, WooCommerce, Easy Digital Downloads) cannot be made public."
 msgstr ""
 
-#: includes/Offloader.php:316
-#: includes/Offloader.php:643
+#: includes/Offloader.php:340
+#: includes/Offloader.php:741
 msgid "The object is being cleaned up right now. Please try again."
 msgstr ""
 
-#: includes/Offloader.php:348
+#: includes/Offloader.php:372
 msgid "The upload could not be recorded in the database."
 msgstr ""
 
-#: includes/Offloader.php:565
+#: includes/Offloader.php:616
 msgid "The restored file could not be recorded in the database."
 msgstr ""
 
-#: includes/Offloader.php:666
+#: includes/Offloader.php:669
+msgid "The local copy is missing, so the object is kept in the bucket."
+msgstr ""
+
+#: includes/Offloader.php:764
 msgid "The new state could not be recorded in the database."
 msgstr ""
 
 #. translators: %s: object key
-#: includes/Offloader.php:710
+#: includes/Offloader.php:811
 #, php-format
 msgid "The previous copy could neither be deleted nor be queued for the cleanup (database error). It stays in the bucket until it is deleted manually: %s"
 msgstr ""
 
-#: includes/Offloader.php:712
+#: includes/Offloader.php:813
 msgid "The previous copy could not be deleted yet. It stays reachable until the hourly cleanup has removed it."
 msgstr ""
 
-#: includes/Offloader.php:1282
-#: includes/Offloader.php:1289
+#: includes/Offloader.php:954
+msgid "The file is being changed by another operation right now. Please try again."
+msgstr ""
+
+#: includes/Offloader.php:1507
+#: includes/Offloader.php:1514
 msgid "Configuration"
 msgstr ""
 
-#: includes/Offloader.php:1282
+#: includes/Offloader.php:1507
 msgid "Endpoint, bucket, access key and secret key are required."
 msgstr ""
 
-#: includes/Offloader.php:1301
-#: includes/Offloader.php:1303
+#: includes/Offloader.php:1526
+#: includes/Offloader.php:1528
 msgid "Upload"
 msgstr ""
 
-#: includes/Offloader.php:1309
-#: includes/Offloader.php:1311
+#: includes/Offloader.php:1534
+#: includes/Offloader.php:1536
 msgid "Download"
 msgstr ""
 
-#: includes/Offloader.php:1309
+#: includes/Offloader.php:1534
 msgid "Content mismatch."
 msgstr ""
 
-#: includes/Offloader.php:1325
+#: includes/Offloader.php:1550
 msgid "Public delivery"
 msgstr ""
 
 #. translators: 1: HTTP status, 2: URL
-#: includes/Offloader.php:1329
+#: includes/Offloader.php:1554
 #, php-format
 msgid "HTTP %1$s for %2$s – make the object prefix publicly readable (bucket policy) or enable signed URLs for all files."
 msgstr ""
 
-#: includes/Offloader.php:1339
+#: includes/Offloader.php:1564
 msgid "Private objects are protected"
 msgstr ""
 
 #. translators: %s: HTTP status
-#: includes/Offloader.php:1343
+#: includes/Offloader.php:1568
 #, php-format
 msgid "Anonymous request returned HTTP %s. Private files are publicly readable – restrict the bucket policy to the public prefix."
 msgstr ""
 
-#: includes/Offloader.php:1357
+#: includes/Offloader.php:1582
 msgid "Signed URLs"
 msgstr ""
 
-#: includes/Offloader.php:1360
+#: includes/Offloader.php:1585
 msgid "Delete"
 msgstr ""
 

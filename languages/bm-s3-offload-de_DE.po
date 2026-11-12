@@ -1,6 +1,6 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: BM S3 Offload 1.0.6\n"
+"Project-Id-Version: BM S3 Offload 1.0.7\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/bm-s3-offload\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -594,54 +594,54 @@ msgstr "Fehler beim Synchronisieren von %s"
 msgid "Files in protected directories (BuddyBoss, WooCommerce, Easy Digital Downloads) cannot be made public."
 msgstr "Dateien in geschützten Verzeichnissen (BuddyBoss, WooCommerce, Easy Digital Downloads) können nicht öffentlich gemacht werden."
 
-#: includes/Offloader.php:1282
-#: includes/Offloader.php:1289
+#: includes/Offloader.php:1507
+#: includes/Offloader.php:1514
 msgid "Configuration"
 msgstr "Konfiguration"
 
-#: includes/Offloader.php:1282
+#: includes/Offloader.php:1507
 msgid "Endpoint, bucket, access key and secret key are required."
 msgstr "Endpoint, Bucket, Access Key und Secret Key sind erforderlich."
 
-#: includes/Offloader.php:1301
-#: includes/Offloader.php:1303
+#: includes/Offloader.php:1526
+#: includes/Offloader.php:1528
 msgid "Upload"
 msgstr "Upload"
 
-#: includes/Offloader.php:1309
-#: includes/Offloader.php:1311
+#: includes/Offloader.php:1534
+#: includes/Offloader.php:1536
 msgid "Download"
 msgstr "Download"
 
-#: includes/Offloader.php:1309
+#: includes/Offloader.php:1534
 msgid "Content mismatch."
 msgstr "Inhalt stimmt nicht überein."
 
-#: includes/Offloader.php:1325
+#: includes/Offloader.php:1550
 msgid "Public delivery"
 msgstr "Öffentliche Auslieferung"
 
 #. translators: 1: HTTP status, 2: URL
-#: includes/Offloader.php:1329
+#: includes/Offloader.php:1554
 #, php-format
 msgid "HTTP %1$s for %2$s – make the object prefix publicly readable (bucket policy) or enable signed URLs for all files."
 msgstr "HTTP %1$s für %2$s – das Objekt-Präfix öffentlich lesbar machen (Bucket-Policy) oder signierte URLs für alle Dateien aktivieren."
 
-#: includes/Offloader.php:1339
+#: includes/Offloader.php:1564
 msgid "Private objects are protected"
 msgstr "Private Objekte sind geschützt"
 
 #. translators: %s: HTTP status
-#: includes/Offloader.php:1343
+#: includes/Offloader.php:1568
 #, php-format
 msgid "Anonymous request returned HTTP %s. Private files are publicly readable – restrict the bucket policy to the public prefix."
 msgstr "Ein anonymer Abruf lieferte HTTP %s. Private Dateien sind öffentlich lesbar – die Bucket-Policy auf das öffentliche Präfix beschränken."
 
-#: includes/Offloader.php:1357
+#: includes/Offloader.php:1582
 msgid "Signed URLs"
 msgstr "Signierte URLs"
 
-#: includes/Offloader.php:1360
+#: includes/Offloader.php:1585
 msgid "Delete"
 msgstr "Löschen"
 
@@ -678,19 +678,19 @@ msgstr "Alle Objekte wurden auf den neuen Endpunkt kopiert (z. B. mit rclone)."
 msgid "Files are offloaded to the current endpoint. A new endpoint is only accepted with this confirmation. Afterwards check the new storage with \"wp bm-s3 verify\"."
 msgstr "Dateien liegen auf dem aktuellen Endpunkt. Ein neuer Endpunkt wird nur mit dieser Bestätigung übernommen. Den neuen Speicher danach mit \"wp bm-s3 verify\" prüfen."
 
-#: includes/Offloader.php:348
+#: includes/Offloader.php:372
 msgid "The upload could not be recorded in the database."
 msgstr "Der Upload konnte nicht in der Datenbank gespeichert werden."
 
-#: includes/Offloader.php:565
+#: includes/Offloader.php:616
 msgid "The restored file could not be recorded in the database."
 msgstr "Die wiederhergestellte Datei konnte nicht in der Datenbank gespeichert werden."
 
-#: includes/Offloader.php:666
+#: includes/Offloader.php:764
 msgid "The new state could not be recorded in the database."
 msgstr "Der neue Zustand konnte nicht in der Datenbank gespeichert werden."
 
-#: includes/Offloader.php:712
+#: includes/Offloader.php:813
 msgid "The previous copy could not be deleted yet. It stays reachable until the hourly cleanup has removed it."
 msgstr "Die bisherige Kopie konnte noch nicht gelöscht werden. Sie bleibt erreichbar, bis die stündliche Bereinigung sie entfernt hat."
 
@@ -742,8 +742,8 @@ msgid_plural "%d objects could not be deleted from the bucket after several atte
 msgstr[0] "%d Objekt konnte nach mehreren Versuchen nicht aus dem Bucket gelöscht werden (z. B. fehlende Löschberechtigung). Es wird stündlich erneut versucht; bis dahin bleibt es im Bucket und ist, falls es eine bisherige öffentliche Kopie ist, erreichbar."
 msgstr[1] "%d Objekte konnten nach mehreren Versuchen nicht aus dem Bucket gelöscht werden (z. B. fehlende Löschberechtigung). Sie werden stündlich erneut versucht; bis dahin bleiben sie im Bucket und sind, falls es bisherige öffentliche Kopien sind, erreichbar."
 
-#: includes/Offloader.php:316
-#: includes/Offloader.php:643
+#: includes/Offloader.php:340
+#: includes/Offloader.php:741
 msgid "The object is being cleaned up right now. Please try again."
 msgstr "Das Objekt wird gerade bereinigt. Bitte erneut versuchen."
 
@@ -756,7 +756,15 @@ msgstr[0] "Die Bereinigung hat das Objekt von %1$d Datei möglicherweise gelösc
 msgstr[1] "Die Bereinigung hat die Objekte von %1$d Dateien möglicherweise gelöscht, obwohl sie wieder verwendet wurden, und sie konnten nicht aus lokalen Kopien wiederhergestellt werden: %2$s. Bitte mit „wp bm-s3 verify --fix“ prüfen (danach verschwindet dieser Hinweis)."
 
 #. translators: %s: object key
-#: includes/Offloader.php:710
+#: includes/Offloader.php:811
 #, php-format
 msgid "The previous copy could neither be deleted nor be queued for the cleanup (database error). It stays in the bucket until it is deleted manually: %s"
 msgstr "Die bisherige Kopie konnte weder gelöscht noch für die Bereinigung vorgemerkt werden (Datenbankfehler). Sie bleibt im Bucket, bis sie manuell gelöscht wird: %s"
+
+#: includes/Offloader.php:669
+msgid "The local copy is missing, so the object is kept in the bucket."
+msgstr "Die lokale Kopie fehlt, deshalb bleibt das Objekt im Bucket."
+
+#: includes/Offloader.php:954
+msgid "The file is being changed by another operation right now. Please try again."
+msgstr "Die Datei wird gerade von einem anderen Vorgang geändert. Bitte erneut versuchen."

@@ -4,7 +4,7 @@ Tags: s3, offload, buddyboss, woocommerce, cdn
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.0.6
+Stable tag: 1.0.7
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -78,6 +78,10 @@ No. URLs in the database stay local and are rewritten on output, so you can deac
 s3:PutObject, s3:GetObject, s3:DeleteObject, s3:ListBucket and the multipart upload permissions on the bucket.
 
 == Changelog ==
+
+= 1.0.7 =
+* Fixed: concurrent changes of the same file (e.g. two opposite privacy changes) could delete all of its objects. All changes of a file are now serialised.
+* Fixed: "Leave the bucket" running at the same time as "Remove local copies" could lose files.
 
 = 1.0.6 =
 * Fixed: a cleanup whose delete request was slower than its lock could delete an object that was in use again.

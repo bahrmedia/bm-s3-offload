@@ -520,7 +520,9 @@ final class Attachments {
 		if ( ! empty( $download['errors'] ) ) {
 			return $download['errors'];
 		}
-		return $this->offloader->delete_remote( $paths );
+		// Objects are only deleted while their local copy still exists (another
+		// operation could have removed it again since the download).
+		return $this->offloader->delete_remote( $paths, true );
 	}
 
 	/*

@@ -117,6 +117,14 @@ class Client {
 	private $deadline = 0.0;
 
 	/**
+	 * Called before every request; returns the deadline of that request
+	 * (microtime), or 0 to stop (see with_guard()).
+	 *
+	 * @var callable|null
+	 */
+	private $guard = null;
+
+	/**
 	 * Size above which copies use a multipart copy.
 	 *
 	 * @var int
@@ -362,6 +370,23 @@ class Client {
 	public function with_deadline( $deadline ) {
 		$client           = clone $this;
 		$client->deadline = (float) $deadline;
+		return $client;
+	}
+
+	/**
+	 * Returns a copy of the client that calls a guard before every single
+	 * request, also before every part of a multipart transfer and before every
+	 * retry. The guard extends the caller's lock and returns the point in time
+	 * (microtime) by which the request has to end; the request's timeout is
+	 * shortened accordingly. If the guard returns a time that has passed (e.g.
+	 * 0 because the lock was lost), no further request is sent.
+	 *
+	 * @param callable $guard Returns the deadline of the next request.
+	 * @return Client
+	 */
+	public function with_guard( callable $guard ) {
+		$client        = clone $this;
+		$client->guard = $guard;
 		return $client;
 	}
 
@@ -720,6 +745,12 @@ class Client {
 	 */
 	private function request( $method, $key, array $query = array(), array $headers = array(), $body = '', $filename = '' ) {
 		for ( $attempt = 0; ; ++$attempt ) {
+			if ( null !== $this->guard ) {
+				$this->deadline = (float) call_user_func( $this->guard );
+				if ( $this->deadline <= microtime( true ) ) {
+					throw new S3Exception( 'The lock of the file was lost; the request was not sent.' );
+				}
+			}
 			$started = microtime( true );
 			if ( $this->deadline > 0 && $started >= $this->deadline ) {
 				throw new S3Exception( 'The time limit of the operation was reached before the request was sent.' );

@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.0.7] – 2026-11-12
+
+### Fixed
+
+- Concurrent changes of the same file could delete each other's objects: two opposite privacy changes (or an upload that changes the privacy and a privacy change) both reported success while neither object existed any more. Every operation that changes a file – upload, privacy change, deletion from the bucket, removal and restore of the local copy and `verify --fix` – now holds a lock on that file and reads its item only once it holds the lock; copying, recording and deleting the previous object run under it. A second operation waits up to 10 seconds (filter `bms3o_file_lock_wait`) and otherwise reports that the file is busy.
+- File locks cannot run out during long transfers: before every request – every part of a multipart transfer and every retry included – the lock is extended (600 seconds) and the request's timeout is shortened so that it ends at least 60 seconds before the lock expires. A request is never sent after the lock was lost.
+- "Leave the bucket" could lose a file when "Remove local copies" ran at the same time (the local copy was removed after the restore and the object deleted afterwards). Objects are now only deleted while the restored local copy still exists, checked under the file lock.
+
 ## [1.0.6] – 2026-11-12
 
 ### Fixed

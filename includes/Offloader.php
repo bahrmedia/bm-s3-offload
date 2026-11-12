@@ -53,6 +53,16 @@ final class Offloader {
 	const QUEUE_FAILED = 'queue_failed';
 
 	/**
+	 * Lifetime of a file lock in seconds; it is extended before every request.
+	 */
+	const PATH_LOCK_TTL = 600;
+
+	/**
+	 * Seconds by which every request under a file lock ends before the lock expires.
+	 */
+	const PATH_LOCK_MARGIN = 60;
+
+	/**
 	 * Settings.
 	 *
 	 * @var Settings
@@ -65,6 +75,13 @@ final class Offloader {
 	 * @var Items
 	 */
 	private $items;
+
+	/**
+	 * File locks held by this instance: path => token and nesting depth.
+	 *
+	 * @var array<string,array{token:string,depth:int}>
+	 */
+	private $path_locks = array();
 
 	/**
 	 * Queue of objects that still have to be deleted.
@@ -284,95 +301,105 @@ final class Offloader {
 			return $result;
 		}
 
-		$bucket   = $client->get_bucket();
-		$existing = $this->items->get_many( $paths );
+		$bucket = $client->get_bucket();
 
 		foreach ( $paths as $path ) {
-			$file = $this->absolute( $path );
-			if ( ! is_file( $file ) ) {
-				$result['skipped'][] = $path;
-				continue;
-			}
-
-			$size  = (int) filesize( $file );
-			$mtime = (int) filemtime( $file );
-			$key   = $this->object_key( $path, $is_private );
-			$item  = isset( $existing[ $path ] ) ? $existing[ $path ] : null;
-
-			// Never let two sources share one object.
-			if ( $item && ( $item['source_type'] !== $source_type || $item['source_id'] !== (int) $source_id ) ) {
-				$result['errors'][ $path ] = sprintf( 'Path is already used by %s #%d.', $item['source_type'], $item['source_id'] );
-				continue;
-			}
-
-			$stored_mtime = $item && isset( $item['local_mtime'] ) ? (int) $item['local_mtime'] : 0;
-			if ( ! $force && $item && $item['bucket'] === $bucket && $item['object_key'] === $key && $item['filesize'] === $size && ( 0 === $stored_mtime || $stored_mtime === $mtime ) ) {
-				$result['skipped'][] = $path;
-				continue;
-			}
-
-			$claim = $this->claim_key( $bucket, $key );
-			if ( false === $claim ) {
-				$result['errors'][ $path ] = __( 'The object is being cleaned up right now. Please try again.', 'bm-s3-offload' );
+			// The current item, the upload, its record and the removal of the previous
+			// object are serialised with all other changes of the file.
+			if ( ! $this->lock_path( $path ) ) {
+				$result['errors'][ $path ] = self::busy_message();
 				continue;
 			}
 
 			try {
-				$client->put_file( $key, $file, $this->upload_headers( $path, $is_private ) );
-			} catch ( S3Exception $e ) {
-				$this->release_key( $bucket, $key, $claim, false );
-				$result['errors'][ $path ] = $e->getMessage();
-				continue;
-			}
-
-			$saved = $this->items->save(
-				array(
-					'source_type'   => $source_type,
-					'source_id'     => $source_id,
-					'path'          => $path,
-					'bucket'        => $bucket,
-					'object_key'    => $key,
-					'is_private'    => $is_private,
-					'local_removed' => false,
-					'filesize'      => $size,
-					'local_mtime'   => $mtime,
-				)
-			);
-			$this->release_key( $bucket, $key, $claim, $saved );
-			if ( ! $saved ) {
-				// The item still points to the previous object: keep that one. The new object
-				// is only an orphan if it lives under another key.
-				if ( ! $item || $item['object_key'] !== $key || $item['bucket'] !== $bucket ) {
-					$this->delete_or_queue( $bucket, $key, $path );
+				$file = $this->absolute( $path );
+				if ( ! is_file( $file ) ) {
+					$result['skipped'][] = $path;
+					continue;
 				}
-				$result['errors'][ $path ] = __( 'The upload could not be recorded in the database.', 'bm-s3-offload' );
-				continue;
-			}
 
-			// The key moved within the bucket (e.g. privacy changed): remove the old object once
-			// the item points to the new one, but only if it belongs to this site's key space (never another
-			// site's object). Failed deletions are retried by the hourly cron.
-			if ( $item && $item['bucket'] === $bucket && $item['object_key'] !== $key && $this->owns_key( $item['object_key'] ) ) {
-				$deleted = $this->delete_or_queue( $item['bucket'], $item['object_key'], $path );
-				if ( self::QUEUE_FAILED === $deleted ) {
-					$result['errors'][ $path ] = self::leftover_message( $deleted, $item['object_key'] );
-				} elseif ( self::DELETED !== $deleted && $is_private && ! $item['is_private'] ) {
-					// A leftover public copy of a file that became private stays readable: report it.
-					$result['errors'][ $path ] = self::leftover_message( $deleted, $item['object_key'] );
+				$size  = (int) filesize( $file );
+				$mtime = (int) filemtime( $file );
+				$key   = $this->object_key( $path, $is_private );
+				$item  = $this->fresh_item( $path );
+
+				// Never let two sources share one object.
+				if ( $item && ( $item['source_type'] !== $source_type || $item['source_id'] !== (int) $source_id ) ) {
+					$result['errors'][ $path ] = sprintf( 'Path is already used by %s #%d.', $item['source_type'], $item['source_id'] );
+					continue;
 				}
+
+				$stored_mtime = $item && isset( $item['local_mtime'] ) ? (int) $item['local_mtime'] : 0;
+				if ( ! $force && $item && $item['bucket'] === $bucket && $item['object_key'] === $key && $item['filesize'] === $size && ( 0 === $stored_mtime || $stored_mtime === $mtime ) ) {
+					$result['skipped'][] = $path;
+					continue;
+				}
+
+				$claim = $this->claim_key( $bucket, $key );
+				if ( false === $claim ) {
+					$result['errors'][ $path ] = __( 'The object is being cleaned up right now. Please try again.', 'bm-s3-offload' );
+					continue;
+				}
+
+				try {
+					$this->client_for( $bucket, $path )->put_file( $key, $file, $this->upload_headers( $path, $is_private ) );
+				} catch ( S3Exception $e ) {
+					$this->release_key( $bucket, $key, $claim, false );
+					$result['errors'][ $path ] = $e->getMessage();
+					continue;
+				}
+
+				$saved = $this->items->save(
+					array(
+						'source_type'   => $source_type,
+						'source_id'     => $source_id,
+						'path'          => $path,
+						'bucket'        => $bucket,
+						'object_key'    => $key,
+						'is_private'    => $is_private,
+						'local_removed' => false,
+						'filesize'      => $size,
+						'local_mtime'   => $mtime,
+					)
+				);
+				$this->release_key( $bucket, $key, $claim, $saved );
+				if ( ! $saved ) {
+					// The item still points to the previous object: keep that one. The new object
+					// is only an orphan if it lives under another key.
+					if ( ! $item || $item['object_key'] !== $key || $item['bucket'] !== $bucket ) {
+						$this->delete_or_queue( $bucket, $key, $path );
+					}
+					$result['errors'][ $path ] = __( 'The upload could not be recorded in the database.', 'bm-s3-offload' );
+					continue;
+				}
+
+				// The key moved within the bucket (e.g. privacy changed): remove the old object once
+				// the item points to the new one, but only if it belongs to this site's key space (never another
+				// site's object). Failed deletions are retried by the hourly cron.
+				if ( $item && $item['bucket'] === $bucket && $item['object_key'] !== $key && $this->owns_key( $item['object_key'] ) ) {
+					$deleted = $this->delete_or_queue( $item['bucket'], $item['object_key'], $path );
+					if ( self::QUEUE_FAILED === $deleted ) {
+						$result['errors'][ $path ] = self::leftover_message( $deleted, $item['object_key'] );
+					} elseif ( self::DELETED !== $deleted && $is_private && ! $item['is_private'] ) {
+						// A leftover public copy of a file that became private stays readable: report it.
+						$result['errors'][ $path ] = self::leftover_message( $deleted, $item['object_key'] );
+					}
+				}
+
+				$result['uploaded'][] = $path;
+
+				/**
+				 * Fires after a file has been uploaded to the bucket.
+				 *
+				 * @param string $path        Relative path.
+				 * @param string $key         Object key.
+				 * @param string $source_type Source type.
+				 * @param int    $source_id   Source ID.
+				 */
+				do_action( 'bms3o_uploaded', $path, $key, $source_type, $source_id );
+			} finally {
+				$this->unlock_path( $path );
 			}
-
-			$result['uploaded'][] = $path;
-
-			/**
-			 * Fires after a file has been uploaded to the bucket.
-			 *
-			 * @param string $path        Relative path.
-			 * @param string $key         Object key.
-			 * @param string $source_type Source type.
-			 * @param int    $source_id   Source ID.
-			 */
-			do_action( 'bms3o_uploaded', $path, $key, $source_type, $source_id );
 		}
 
 		return $result;
@@ -484,39 +511,54 @@ final class Offloader {
 		$items   = $this->items->get_many( $paths );
 		$removed = array();
 
-		foreach ( $items as $path => $item ) {
-			$file = $this->absolute( $path );
-			if ( ! is_file( $file ) ) {
-				if ( ! $item['local_removed'] ) {
-					$removed[] = $path;
+		foreach ( array_keys( $items ) as $path ) {
+			// The check of the object and the removal run under the file lock: the object
+			// cannot be deleted or moved in between.
+			if ( ! $this->lock_path( $path ) ) {
+				continue; // Another operation changes the file: keep the local copy.
+			}
+
+			try {
+				$item = $this->fresh_item( $path );
+				if ( ! $item ) {
+					continue; // Deleted meanwhile (e.g. "Leave the bucket"): keep the local copy.
 				}
-				continue;
-			}
-
-			clearstatcache( true, $file );
-			$stored_mtime = isset( $item['local_mtime'] ) ? (int) $item['local_mtime'] : 0;
-			if ( (int) filesize( $file ) !== $item['filesize'] || ( $stored_mtime && (int) filemtime( $file ) !== $stored_mtime ) ) {
-				continue; // Changed after upload: keep it, it will be offloaded again.
-			}
-
-			if ( $verify ) {
-				try {
-					$head = $this->settings->client( $item['bucket'] )->head( $item['object_key'] );
-				} catch ( \Exception $e ) {
+				$file = $this->absolute( $path );
+				if ( ! is_file( $file ) ) {
+					if ( ! $item['local_removed'] ) {
+						$this->items->set_local_removed( array( $path ), true );
+						$removed[] = $path;
+					}
 					continue;
 				}
-				if ( ! self::head_matches( $head, (int) $item['filesize'] ) ) {
-					continue; // Missing or different object (e.g. truncated): keep the local copy.
-				}
-			}
 
-			wp_delete_file( $file );
-			if ( ! is_file( $file ) ) {
-				$removed[] = $path;
+				clearstatcache( true, $file );
+				$stored_mtime = isset( $item['local_mtime'] ) ? (int) $item['local_mtime'] : 0;
+				if ( (int) filesize( $file ) !== $item['filesize'] || ( $stored_mtime && (int) filemtime( $file ) !== $stored_mtime ) ) {
+					continue; // Changed after upload: keep it, it will be offloaded again.
+				}
+
+				if ( $verify ) {
+					try {
+						$head = $this->client_for( $item['bucket'], $path )->head( $item['object_key'] );
+					} catch ( \Exception $e ) {
+						continue;
+					}
+					if ( ! self::head_matches( $head, (int) $item['filesize'] ) ) {
+						continue; // Missing or different object (e.g. truncated): keep the local copy.
+					}
+				}
+
+				wp_delete_file( $file );
+				if ( ! is_file( $file ) ) {
+					$this->items->set_local_removed( array( $path ), true );
+					$removed[] = $path;
+				}
+			} finally {
+				$this->unlock_path( $path );
 			}
 		}
 
-		$this->items->set_local_removed( $removed, true );
 		return $removed;
 	}
 
@@ -534,7 +576,6 @@ final class Offloader {
 
 		$this->unqueue_local_removal( $paths );
 		$items = $this->items->get_many( $paths );
-		$done  = array();
 
 		$blocked = $this->settings->storage_error();
 		if ( '' !== $blocked ) {
@@ -542,79 +583,124 @@ final class Offloader {
 			return $result;
 		}
 
-		foreach ( $items as $path => $item ) {
-			$file = $this->absolute( $path );
-			if ( is_file( $file ) ) {
-				if ( $item['local_removed'] ) {
-					$done[] = $path;
-				}
+		foreach ( array_keys( $items ) as $path ) {
+			if ( ! $this->lock_path( $path ) ) {
+				$result['errors'][ $path ] = self::busy_message();
 				continue;
 			}
 
 			try {
-				$this->settings->client( $item['bucket'] )->get_to_file( $item['object_key'], $file );
-			} catch ( \Exception $e ) {
-				$result['errors'][ $path ] = $e->getMessage();
-				continue;
-			}
+				$item = $this->fresh_item( $path );
+				if ( ! $item ) {
+					continue; // Deleted meanwhile.
+				}
+				$file = $this->absolute( $path );
+				if ( is_file( $file ) ) {
+					if ( $item['local_removed'] ) {
+						$this->items->set_local_removed( array( $path ), false );
+					}
+					continue;
+				}
 
-			// The restored file is identical to the object: remember its new timestamp.
-			$item['local_mtime']   = (int) filemtime( $file );
-			$item['local_removed'] = false;
-			if ( ! $this->items->save( $item ) ) {
-				$result['errors'][ $path ] = __( 'The restored file could not be recorded in the database.', 'bm-s3-offload' );
-				continue;
-			}
+				try {
+					$this->client_for( $item['bucket'], $path )->get_to_file( $item['object_key'], $file );
+				} catch ( \Exception $e ) {
+					$result['errors'][ $path ] = $e->getMessage();
+					continue;
+				}
 
-			$done[]                 = $path;
-			$result['downloaded'][] = $path;
+				// The restored file is identical to the object: remember its new timestamp.
+				$item['local_mtime']   = (int) filemtime( $file );
+				$item['local_removed'] = false;
+				if ( ! $this->items->save( $item ) ) {
+					$result['errors'][ $path ] = __( 'The restored file could not be recorded in the database.', 'bm-s3-offload' );
+					continue;
+				}
+
+				$result['downloaded'][] = $path;
+			} finally {
+				$this->unlock_path( $path );
+			}
 		}
 
-		$this->items->set_local_removed( $done, false );
 		return $result;
 	}
 
 	/**
 	 * Deletes objects from the bucket and forgets the items.
 	 *
-	 * @param string[] $paths Relative paths.
+	 * @param string[] $paths         Relative paths.
+	 * @param bool     $require_local Only delete objects whose local copy exists with the
+	 *                                recorded size (checked under the file lock), e.g.
+	 *                                when leaving the bucket after a restore.
 	 * @return array<string,string> Errors by path.
 	 */
-	public function delete_remote( array $paths ) {
-		$items = $this->items->get_many( $paths );
-		if ( empty( $items ) ) {
+	public function delete_remote( array $paths, $require_local = false ) {
+		$candidates = $this->items->get_many( $paths );
+		if ( empty( $candidates ) ) {
 			return array();
 		}
 
 		$blocked = $this->settings->storage_error();
 		if ( '' !== $blocked ) {
-			return array_fill_keys( array_keys( $items ), $blocked );
-		}
-
-		// Every item is deleted from the bucket it was uploaded to.
-		$by_bucket = array();
-		foreach ( $items as $path => $item ) {
-			$by_bucket[ $item['bucket'] ][ $item['object_key'] ] = $path;
+			return array_fill_keys( array_keys( $candidates ), $blocked );
 		}
 
 		$errors = array();
-		foreach ( $by_bucket as $bucket => $keys ) {
-			try {
-				$failed = $this->settings->client( (string) $bucket )->delete_many( array_keys( $keys ) );
-			} catch ( \Exception $e ) {
-				foreach ( $keys as $path ) {
-					$errors[ $path ] = $e->getMessage();
+		$locked = array();
+		$items  = array();
+		try {
+			// Lock every file and read its current item; the deletion and the removal of
+			// the item run under the same locks.
+			foreach ( array_keys( $candidates ) as $path ) {
+				if ( ! $this->lock_path( $path ) ) {
+					$errors[ $path ] = self::busy_message();
+					continue;
 				}
-				continue;
+				$locked[] = $path;
+				$item     = $this->fresh_item( $path );
+				if ( ! $item ) {
+					continue; // Deleted meanwhile.
+				}
+				if ( $require_local ) {
+					$file = $this->absolute( $path );
+					clearstatcache( true, $file );
+					if ( ! is_file( $file ) || (int) filesize( $file ) !== (int) $item['filesize'] ) {
+						$errors[ $path ] = __( 'The local copy is missing, so the object is kept in the bucket.', 'bm-s3-offload' );
+						continue;
+					}
+				}
+				$items[ $path ] = $item;
 			}
-			foreach ( $failed as $key => $message ) {
-				if ( isset( $keys[ $key ] ) ) {
-					$errors[ $keys[ $key ] ] = $message;
+
+			// Every item is deleted from the bucket it was uploaded to.
+			$by_bucket = array();
+			foreach ( $items as $path => $item ) {
+				$by_bucket[ $item['bucket'] ][ $item['object_key'] ] = $path;
+			}
+
+			foreach ( $by_bucket as $bucket => $keys ) {
+				try {
+					$failed = $this->client_for( (string) $bucket, array_values( $keys ) )->delete_many( array_keys( $keys ) );
+				} catch ( \Exception $e ) {
+					foreach ( $keys as $path ) {
+						$errors[ $path ] = $e->getMessage();
+					}
+					continue;
 				}
+				foreach ( $failed as $key => $message ) {
+					if ( isset( $keys[ $key ] ) ) {
+						$errors[ $keys[ $key ] ] = $message;
+					}
+				}
+			}
+
+			$this->items->delete( array_diff( array_keys( $items ), array_keys( $errors ) ) );
+		} finally {
+			foreach ( $locked as $path ) {
+				$this->unlock_path( $path );
 			}
 		}
-
-		$this->items->delete( array_diff( array_keys( $items ), array_keys( $errors ) ) );
 		return $errors;
 	}
 
@@ -632,47 +718,62 @@ final class Offloader {
 			return array_fill_keys( array_keys( $this->items->get_many( $paths ) ), $blocked );
 		}
 
-		foreach ( $this->items->get_many( $paths ) as $path => $item ) {
-			$key = $this->object_key( $path, (bool) $is_private );
-			if ( $key === $item['object_key'] && (bool) $is_private === (bool) $item['is_private'] ) {
-				continue;
-			}
-
-			$claim = $this->claim_key( $item['bucket'], $key );
-			if ( false === $claim ) {
-				$errors[ $path ] = __( 'The object is being cleaned up right now. Please try again.', 'bm-s3-offload' );
+		foreach ( array_keys( $this->items->get_many( $paths ) ) as $path ) {
+			// Read, copy, record and delete the previous object under the file lock, so
+			// that concurrent changes of the same file cannot delete each other's objects.
+			if ( ! $this->lock_path( $path ) ) {
+				$errors[ $path ] = self::busy_message();
 				continue;
 			}
 
 			try {
-				$client = $this->settings->client( $item['bucket'] );
-				$client->copy( $item['object_key'], $key, $this->upload_headers( $path, (bool) $is_private ), (int) $item['filesize'] );
-			} catch ( \Exception $e ) {
-				$this->release_key( $item['bucket'], $key, $claim, false );
-				$errors[ $path ] = $e->getMessage();
-				continue;
-			}
-
-			$old_key            = $item['object_key'];
-			$item['object_key'] = $key;
-			$item['is_private'] = (bool) $is_private;
-			$saved              = $this->items->save( $item );
-			$this->release_key( $item['bucket'], $key, $claim, $saved );
-			if ( ! $saved ) {
-				// The item still points to the old object: keep it and drop the copy.
-				if ( $old_key !== $key ) {
-					$this->delete_or_queue( $item['bucket'], $key, $path );
+				$item = $this->fresh_item( $path );
+				if ( ! $item ) {
+					continue; // Deleted meanwhile.
 				}
-				$errors[ $path ] = __( 'The new state could not be recorded in the database.', 'bm-s3-offload' );
-				continue;
-			}
-
-			// A leftover public copy would stay readable: report it and retry hourly.
-			if ( $old_key !== $key && $this->owns_key( $old_key ) ) {
-				$deleted = $this->delete_or_queue( $item['bucket'], $old_key, $path );
-				if ( self::DELETED !== $deleted ) {
-					$errors[ $path ] = self::leftover_message( $deleted, $old_key );
+				$key = $this->object_key( $path, (bool) $is_private );
+				if ( $key === $item['object_key'] && (bool) $is_private === (bool) $item['is_private'] ) {
+					continue;
 				}
+
+				$claim = $this->claim_key( $item['bucket'], $key );
+				if ( false === $claim ) {
+					$errors[ $path ] = __( 'The object is being cleaned up right now. Please try again.', 'bm-s3-offload' );
+					continue;
+				}
+
+				try {
+					$client = $this->client_for( $item['bucket'], $path );
+					$client->copy( $item['object_key'], $key, $this->upload_headers( $path, (bool) $is_private ), (int) $item['filesize'] );
+				} catch ( \Exception $e ) {
+					$this->release_key( $item['bucket'], $key, $claim, false );
+					$errors[ $path ] = $e->getMessage();
+					continue;
+				}
+
+				$old_key            = $item['object_key'];
+				$item['object_key'] = $key;
+				$item['is_private'] = (bool) $is_private;
+				$saved              = $this->items->save( $item );
+				$this->release_key( $item['bucket'], $key, $claim, $saved );
+				if ( ! $saved ) {
+					// The item still points to the old object: keep it and drop the copy.
+					if ( $old_key !== $key ) {
+						$this->delete_or_queue( $item['bucket'], $key, $path );
+					}
+					$errors[ $path ] = __( 'The new state could not be recorded in the database.', 'bm-s3-offload' );
+					continue;
+				}
+
+				// A leftover public copy would stay readable: report it and retry hourly.
+				if ( $old_key !== $key && $this->owns_key( $old_key ) ) {
+					$deleted = $this->delete_or_queue( $item['bucket'], $old_key, $path );
+					if ( self::DELETED !== $deleted ) {
+						$errors[ $path ] = self::leftover_message( $deleted, $old_key );
+					}
+				}
+			} finally {
+				$this->unlock_path( $path );
 			}
 		}
 
@@ -690,7 +791,7 @@ final class Offloader {
 	 */
 	public function delete_or_queue( $bucket, $key, $path ) {
 		try {
-			$this->settings->client( (string) $bucket )->delete( $key );
+			$this->client_for( (string) $bucket, (string) $path )->delete( $key );
 			return self::DELETED;
 		} catch ( \Exception $e ) {
 			return $this->queue_orphans( array( array( (string) $bucket, (string) $key, (string) $path ) ) ) ? self::QUEUED : self::QUEUE_FAILED;
@@ -784,6 +885,111 @@ final class Offloader {
 	 */
 	private function current_storage() {
 		return Settings::storage_id( (string) $this->settings->get( 'endpoint' ) );
+	}
+
+	/**
+	 * Name of the lock that serialises all changes of a file (its item and its
+	 * objects): upload, privacy change, deletion, removal and restore of the
+	 * local copy and verify --fix.
+	 *
+	 * @param string $path Relative path.
+	 * @return string
+	 */
+	private static function path_lock( $path ) {
+		return 'bms3o_path_lock_' . md5( (string) $path );
+	}
+
+	/**
+	 * Locks a file for a change. Locks are re-entrant within this instance.
+	 * Order: a file lock is always taken before object locks, never after.
+	 *
+	 * @param string     $path Relative path.
+	 * @param float|null $wait Seconds to wait for another operation (null: filter default).
+	 * @return bool False if another operation holds the lock.
+	 */
+	private function lock_path( $path, $wait = null ) {
+		if ( isset( $this->path_locks[ $path ] ) ) {
+			++$this->path_locks[ $path ]['depth'];
+			return true;
+		}
+		if ( null === $wait ) {
+			/**
+			 * Filters how long an operation waits for another operation on the same file (seconds).
+			 *
+			 * @param float $seconds Wait time.
+			 */
+			$wait = (float) apply_filters( 'bms3o_file_lock_wait', 10.0 );
+		}
+		$token = Lock::acquire( self::path_lock( $path ), self::PATH_LOCK_TTL, (float) $wait );
+		if ( '' === $token ) {
+			return false;
+		}
+		$this->path_locks[ $path ] = array(
+			'token' => $token,
+			'depth' => 1,
+		);
+		return true;
+	}
+
+	/**
+	 * Releases a file lock of lock_path().
+	 *
+	 * @param string $path Relative path.
+	 * @return void
+	 */
+	private function unlock_path( $path ) {
+		if ( ! isset( $this->path_locks[ $path ] ) || --$this->path_locks[ $path ]['depth'] > 0 ) {
+			return;
+		}
+		Lock::release( self::path_lock( $path ), $this->path_locks[ $path ]['token'] );
+		unset( $this->path_locks[ $path ] );
+	}
+
+	/**
+	 * Message for a file that another operation is changing.
+	 *
+	 * @return string
+	 */
+	private static function busy_message() {
+		return __( 'The file is being changed by another operation right now. Please try again.', 'bm-s3-offload' );
+	}
+
+	/**
+	 * Current item of a path, read from the database (call it while the file is locked).
+	 *
+	 * @param string $path Relative path.
+	 * @return array|null
+	 */
+	private function fresh_item( $path ) {
+		$this->items->forget( array( $path ) );
+		return $this->items->get( $path );
+	}
+
+	/**
+	 * S3 client for requests on behalf of locked files: before every request
+	 * the file locks are extended, and the request ends PATH_LOCK_MARGIN
+	 * seconds before they expire. Without a held lock the plain client is used.
+	 *
+	 * @param string          $bucket Bucket.
+	 * @param string|string[] $paths  Paths the requests are made for.
+	 * @return \BahrMedia\S3Offload\S3\Client
+	 */
+	private function client_for( $bucket, $paths ) {
+		$client = $this->settings->client( (string) $bucket );
+		$held   = array_values( array_intersect( (array) $paths, array_keys( $this->path_locks ) ) );
+		if ( empty( $held ) ) {
+			return $client;
+		}
+		return $client->with_guard(
+			function () use ( $held ) {
+				foreach ( $held as $path ) {
+					if ( ! isset( $this->path_locks[ $path ] ) || ! Lock::refresh( self::path_lock( $path ), $this->path_locks[ $path ]['token'], self::PATH_LOCK_TTL ) ) {
+						return 0.0;
+					}
+				}
+				return microtime( true ) + self::PATH_LOCK_TTL - self::PATH_LOCK_MARGIN;
+			}
+		);
 	}
 
 	/**
@@ -958,7 +1164,16 @@ final class Offloader {
 		$item  = $this->items->get( $path );
 		$entry = $this->orphans->get( $bucket, $key );
 		if ( $item && $item['bucket'] === $bucket && $item['object_key'] === $key ) {
-			$result = $this->verify( $item, true );
+			// Never wait for a file lock while holding object locks (an operation that
+			// holds the file lock may wait for them); a busy file is reported.
+			$result = '';
+			if ( $this->lock_path( $path, 0.0 ) ) {
+				try {
+					$result = $this->verify( $item, true );
+				} finally {
+					$this->unlock_path( $path );
+				}
+			}
 			if ( 'ok' === $result || 'fixed' === $result ) {
 				return;
 			}
@@ -1014,8 +1229,16 @@ final class Offloader {
 	 *                (e.g. a size mismatch).
 	 */
 	public function verify( array $item, $fix = false ) {
+		$path = (string) $item['path'];
+		if ( ! $this->lock_path( $path ) ) {
+			return self::busy_message();
+		}
 		try {
-			$client = $this->settings->client( $item['bucket'] );
+			$item = $this->fresh_item( $path );
+			if ( ! $item ) {
+				return 'ok'; // Deleted meanwhile: nothing to check.
+			}
+			$client = $this->client_for( $item['bucket'], $path );
 			$head   = $client->head( $item['object_key'] );
 			if ( self::head_matches( $head, (int) $item['filesize'] ) ) {
 				return 'ok';
@@ -1039,6 +1262,8 @@ final class Offloader {
 			return 'fixed';
 		} catch ( \Exception $e ) {
 			return $e->getMessage();
+		} finally {
+			$this->unlock_path( $path );
 		}
 	}
 

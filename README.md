@@ -190,6 +190,7 @@ output → wp_get_attachment_url / image_downsize / srcset / content filters
 ```
 
 - **S3 client**: `includes/S3/Client.php` – AWS Signature V4 on top of the WordPress HTTP API: PutObject, multipart upload, GetObject (streamed to disk), HeadObject, CopyObject (multipart copy above 5 GiB), DeleteObject(s), ListObjectsV2, pre-signed URLs. Network errors, throttling and 5xx responses are retried twice.
+- **Concurrent changes**: every change of a file (upload, privacy change, deletion, removal and restore of the local copy, `verify --fix`) holds a lock on that file and reads the file's record only under it, so concurrent operations never delete each other's objects. The lock is extended before every S3 request, and each request ends well before the lock expires.
 - **Cleanup**: objects whose deletion failed (e.g. the previous public copy of a file made private) are retried by the hourly cron; objects that are referenced again are never deleted. The queue is a table with one row per object (atomic changes); objects are locked in chunks while they are checked and deleted, and their delete requests end by a deadline well before the locks expire (the S3 client shortens timeouts and skips retries accordingly). Operations that write to a queued key claim it under the same lock; the cleanup leaves claimed objects alone, and a failed write releases the claim so the deletion stays queued. If an object could neither be deleted nor queued (database error), the message names it and it is written to the PHP error log. Failing entries are retried after the others, and entries only run on the storage they belong to. Queued deletions block a change of storage like offloaded files do.
 - **No lock-in**: content in the database keeps local URLs. Deactivating the plugin (after *Leave the bucket* if local copies were removed) restores the original behaviour.
 
@@ -214,6 +215,7 @@ output → wp_get_attachment_url / image_downsize / srcset / content filters
 | `bms3o_bulk_time_limit` | filter | Time budget of a browser bulk request in seconds (default 20, at most half of `max_execution_time`) |
 | `bms3o_uploaded` | action | After a file has been uploaded |
 | `bms3o_count_cache_ttl` | filter | Lifetime of the cached counters of the tools tab in seconds (default 300, 0 disables the cache) |
+| `bms3o_file_lock_wait` | filter | Seconds an operation waits for another operation on the same file (default 10) |
 | `bms3o_object_lock_wait` | filter | Seconds an upload or privacy change waits for the cleanup of the same object (default 10) |
 | `bms3o_storage_changed` | action | After a confirmed change of storage (previous and new storage identity) |
 
