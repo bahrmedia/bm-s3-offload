@@ -4,11 +4,11 @@ Tags: s3, offload, buddyboss, woocommerce, cdn
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.0.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Offload your media library to any S3-compatible storage with first-class BuddyBoss support. Free, no limits, no SDK.
+Offload your media library to any S3-compatible storage with first-class BuddyBoss support. Free, no Pro version, no SDK.
 
 == Description ==
 
@@ -25,11 +25,11 @@ Everything is free – there is no Pro version:
 * CDN for theme, plugin and core scripts and styles
 * WebP/AVIF copies of image optimisers are offloaded too
 * "Leave the bucket": move everything back with one click
-* `wp bm-s3 verify --fix`: check and repair bucket contents
+* `wp bm-s3 verify --fix`: check and repair bucket contents (existence and size)
 * All settings configurable in wp-config.php (`BMS3O_*` constants)
 * Credentials stored encrypted
 * No SDK, no external dependencies – an own, lightweight S3 client (AWS Signature V4)
-* End-to-end tested against real S3 storage, BuddyBoss and WooCommerce
+* Core features end-to-end tested against real S3 storage (MinIO), BuddyBoss Platform and WooCommerce
 
 = BuddyBoss =
 
@@ -44,7 +44,7 @@ Everything is free – there is no Pro version:
 
 = WP-CLI =
 
-`wp bm-s3 status|test|offload|remove-local|download|unoffload|privacy|verify|background|bb-sync`
+`wp bm-s3 status|test|offload|remove-local|download|unoffload|privacy|verify|storage|background|bb-sync`
 
 == Installation ==
 
@@ -59,7 +59,15 @@ Make only the object prefix (default `wp-content/uploads/`) publicly readable in
 
 = Is there a file or size limit? =
 
-No.
+There are no quotas and no limits on the number of files. Files are uploaded in parts above 16 MiB and copied in parts above 5 GiB.
+
+= Can I use several storages or move to another provider? =
+
+One storage at a time. To move, copy all objects with a tool such as rclone, then enter the new endpoint and confirm the copy (or run `wp bm-s3 storage confirm`). Until then the plugin pauses all bucket operations.
+
+= What does "private" mean? =
+
+Private media library files are delivered to every visitor, but only with expiring signed URLs. BuddyBoss media and shop downloads are additionally access-checked: signed URLs are only handed out after BuddyBoss or WooCommerce has checked the visitor's permission.
 
 = Does it change my content? =
 
@@ -70,6 +78,15 @@ No. URLs in the database stay local and are rewritten on output, so you can deac
 s3:PutObject, s3:GetObject, s3:DeleteObject, s3:ListBucket and the multipart upload permissions on the bucket.
 
 == Changelog ==
+
+= 1.0.1 =
+* Fixed: uninstall could remove the mapping of files that exist only in the bucket.
+* Fixed: when making files private, a public copy that could not be deleted stayed reachable without notice; it is now reported and removed by an hourly cleanup.
+* Fixed: changing the endpoint while files are offloaded required no confirmation and could treat objects as present on the new storage.
+* Fixed: failed database writes and failed deletions of deleted media were not handled.
+* Local copies are only removed when the object in the bucket has the same size.
+* Secrets are never stored in plain text when encryption fails.
+* Retries for network errors, throttling and temporary server errors; multipart copy above 5 GiB.
 
 = 1.0.0 =
 * Initial release.

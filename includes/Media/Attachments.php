@@ -306,8 +306,17 @@ final class Attachments {
 
 		$paths  = array_keys( $this->offloader->items()->get_by_source( Items::SOURCE_POST, (int) $attachment_id ) );
 		$errors = $this->offloader->set_privacy( $paths, (bool) $is_private );
-		if ( empty( $errors ) ) {
-			// Only on success; otherwise the next offload moves files back to the stored state.
+
+		// Store the new state once every object has been moved (a leftover previous copy is
+		// reported, but cleaned up later); otherwise the next offload moves files back to the
+		// stored state.
+		$moved = true;
+		foreach ( $this->offloader->items()->get_by_source( Items::SOURCE_POST, (int) $attachment_id ) as $item ) {
+			if ( (bool) $item['is_private'] !== (bool) $is_private ) {
+				$moved = false;
+			}
+		}
+		if ( $moved ) {
 			update_post_meta( $attachment_id, self::META_PRIVATE, $is_private ? '1' : '0' );
 		}
 		return $errors;
@@ -538,9 +547,16 @@ final class Attachments {
 		$this->offloader->unqueue_local_removal( $paths );
 
 		if ( $this->offloader->settings()->get( 'delete_remote' ) && $this->offloader->settings()->is_configured() ) {
-			$this->offloader->delete_remote( $paths );
+			// Objects that could not be deleted are retried by the hourly cleanup.
+			$orphans = array();
+			foreach ( array_keys( $this->offloader->delete_remote( $paths ) ) as $path ) {
+				$orphans[] = array( $items[ $path ]['bucket'], $items[ $path ]['object_key'], $path );
+			}
+			if ( ! empty( $orphans ) ) {
+				$this->offloader->queue_orphans( $orphans );
+			}
 		}
-		// Forget remaining items (delete disabled or failed): the attachment is gone.
+		// Forget remaining items: the attachment is gone.
 		$this->offloader->items()->delete( $paths );
 		$this->clear_retry( (int) $attachment_id );
 	}

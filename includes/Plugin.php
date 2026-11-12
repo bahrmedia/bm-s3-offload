@@ -98,6 +98,7 @@ final class Plugin {
 		$this->settings    = new Settings();
 		$this->offloader   = new Offloader( $this->settings, new Items() );
 		$this->attachments = new Attachments( $this->offloader );
+		add_action( self::CRON_HOOK, array( $this->offloader, 'process_orphans' ), 10, 0 );
 		$this->attachments->register();
 		( new ContentRewriter( $this->offloader ) )->register();
 		( new Assets( $this->settings ) )->register();

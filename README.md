@@ -2,7 +2,7 @@
 
 Offload the WordPress media library to **any S3-compatible object storage** – with first-class **BuddyBoss** support.
 
-**Free. Open source (GPL-2.0-or-later). No limits. No Pro version. No SDK.**
+**Free. Open source (GPL-2.0-or-later). No Pro version, no file quotas. No SDK.**
 
 [Deutsche Kurzbeschreibung weiter unten](#deutsch)
 
@@ -10,35 +10,22 @@ Offload the WordPress media library to **any S3-compatible object storage** – 
 
 ## Why another offload plugin?
 
-We analysed the popular offload plugins (WP Offload Media Lite, Media Cloud, Advanced Media Offloader, WP-Stateless, Infinite Uploads, Media Cloud Sync, Offload Media – Cloud Storage). All of them
+In November 2026 we analysed the free versions of seven popular offload plugins. Each has its strengths, but none of them offers all of the following in its free version: bulk migration, private files with signed URLs, WP-CLI, any S3-compatible endpoint and BuddyBoss media with BuddyBoss' privacy checks. Several paid versions do (e.g. WP Offload Media with its BuddyBoss integration).
 
-- ship a complete vendor SDK (6–57 MB),
-- put essential features behind a paid plan (bulk migration of existing media, private files / signed URLs, WP-CLI, BuddyBoss and WooCommerce support, asset CDN, background processing),
-- and none of them protects BuddyBoss media according to BuddyBoss' privacy settings.
+| Free version analysed | Bulk migration | Private files / signed URLs | WP-CLI | Any S3 endpoint | BuddyBoss media | Bundled SDK |
+|---|---|---|---|---|---|---|
+| WP Offload Media Lite 3.4.4 | paid | paid | paid | fixed providers | paid version | AWS + GCS, 23 MB |
+| Media Cloud 4.7.4 | paid | ✔ (per media type paid) | partly | ✔ | paid | AWS, 29 MB |
+| Advanced Media Offloader 4.7.3 | ✔ (in batches) | – | ✔ | ✔ | – | AWS, 5.9 MB |
+| WP-Stateless 4.5.0 | ✔ | – | ✔ | Google Cloud Storage only | free add-on | Google, 16 MB |
+| Infinite Uploads 3.5.2 | ✔ (within the quota) | – | ✔ | own cloud service only | avatars/covers stay local | AWS, 54 MB |
+| Media Cloud Sync 1.5.0 | ✔ (cron; browser paid) | paid | basic | ✔ | paid | AWS + GCS, 20 MB |
+| Offload Media – Cloud Storage 1.9.0 | paid | ✔ | – | AWS/GCS/DO/R2 (others paid) | – | AWS + GCS, 57 MB |
+| **BM S3 Offload** | ✔ browser, background, WP-CLI | ✔ | ✔ | ✔ | ✔ with BuddyBoss' access checks | none (< 400 KB in total) |
 
-BM S3 Offload does all of that for free – the whole plugin including translations is smaller than 400 KB, and every feature is covered by end-to-end tests against a real S3 server.
+Versions as analysed on 2026-11-11 from their source code; SDK sizes are the size of the bundled SDK on disk. Plans and features of other plugins change – check their current documentation.
 
-| | BM S3 Offload | typical competitor (free) |
-|---|---|---|
-| Offload new uploads | ✔ | ✔ |
-| Migrate existing media (bulk) | ✔ browser + WP-CLI | often Pro |
-| Remove local copies | ✔ | ✔ |
-| Private files / signed URLs | ✔ | often Pro |
-| Make single files private / public | ✔ | Pro |
-| WP-CLI | ✔ | often Pro |
-| Bulk operations in the background (no open browser) | ✔ | Pro or missing |
-| WooCommerce downloads from the bucket | ✔ signed redirect | Pro |
-| CDN for CSS / JavaScript ("assets pull") | ✔ | Pro |
-| WebP / AVIF copies of image optimisers | ✔ | Pro |
-| Media library filter by storage state | ✔ | Pro or missing |
-| Verify & repair bucket contents | ✔ | missing |
-| Any S3-compatible provider | ✔ | often fixed list |
-| BuddyBoss photos, documents, videos | ✔ privacy-aware | Pro or missing |
-| BuddyBoss avatars & cover images | ✔ | Pro or missing |
-| Multipart upload for large files | ✔ streamed | often missing |
-| Credentials encrypted / via wp-config | ✔ | plain text |
-| Dependencies | none | vendor SDK |
-| Automated end-to-end tests | ✔ WordPress + S3 + BuddyBoss + WooCommerce | – |
+BM S3 Offload is free without a Pro version, ships its own small S3 client instead of a vendor SDK, and integrates BuddyBoss' own access checks. Its core features are covered by end-to-end tests against WordPress, a real S3 server (MinIO), BuddyBoss Platform and WooCommerce; BuddyBoss' commercial document and video add-ons are not part of the tests.
 
 ## Features
 
@@ -175,10 +162,21 @@ wp bm-s3 download --all              # restore local copies
 wp bm-s3 unoffload --all --yes       # move everything back and empty the bucket
 wp bm-s3 bb-sync                     # mirror existing BuddyBoss avatars and covers
 wp bm-s3 privacy 12 34 --private     # expiring signed URLs (or --public)
-wp bm-s3 verify [--fix]              # check that every object exists, repair from local copies
+wp bm-s3 verify [--fix]              # check every object (existence and size), repair from local copies
+wp bm-s3 storage [confirm]           # storage check; confirm a change of storage
 wp bm-s3 background start offload --remove-local   # run in the background (WP-Cron)
 wp bm-s3 background status|stop
 ```
+
+## Changing the storage
+
+The plugin works with one storage at a time. To move to another provider or endpoint:
+
+1. Copy all objects with a tool built for it, e.g. `rclone sync old:bucket new:bucket` (or the provider's migration service, such as Cloudflare R2 Super Slurper).
+2. Enter the new endpoint (and credentials) and confirm *All objects have been copied* – or, if the endpoint is set in `wp-config.php`, run `wp bm-s3 storage confirm`.
+3. Check the new storage with `wp bm-s3 verify` (`--fix` uploads missing objects from local copies).
+
+While the endpoint differs from the storage the files were uploaded to, the plugin pauses all uploads, deletions and removals of local copies and shows a notice. Changing only the bucket on the same endpoint needs no confirmation: existing files keep their bucket.
 
 ## How it works
 
@@ -191,7 +189,8 @@ output → wp_get_attachment_url / image_downsize / srcset / content filters
        → bucket, CDN or signed URL (one indexed query per text, cached)
 ```
 
-- **S3 client**: `includes/S3/Client.php` – AWS Signature V4 on top of the WordPress HTTP API: PutObject, multipart upload, GetObject (streamed to disk), HeadObject, DeleteObject(s), ListObjectsV2, pre-signed URLs.
+- **S3 client**: `includes/S3/Client.php` – AWS Signature V4 on top of the WordPress HTTP API: PutObject, multipart upload, GetObject (streamed to disk), HeadObject, CopyObject (multipart copy above 5 GiB), DeleteObject(s), ListObjectsV2, pre-signed URLs. Network errors, throttling and 5xx responses are retried twice.
+- **Cleanup**: objects whose deletion failed (e.g. the previous public copy of a file made private) are retried by the hourly cron; objects that are referenced again are never deleted.
 - **No lock-in**: content in the database keeps local URLs. Deactivating the plugin (after *Leave the bucket* if local copies were removed) restores the original behaviour.
 
 ### Hooks for developers
@@ -220,7 +219,7 @@ Every push runs in GitHub Actions:
 
 - `php -l` on PHP 7.4 – 8.4
 - WordPress Coding Standards and PHPCompatibility
-- **End-to-end tests** (`tests/integration/`) against real WordPress installations (6.2 / PHP 7.4 and latest / PHP 8.3 with BuddyBoss Platform and WooCommerce) and a real S3 server (MinIO): S3 client, media lifecycle, privacy, BuddyBoss privacy matrix, WooCommerce orders, bulk and background operations. See [tests/integration/README.md](tests/integration/README.md).
+- **End-to-end tests** (`tests/integration/`) against real WordPress installations (6.2 / PHP 7.4 and latest / PHP 8.3 with BuddyBoss Platform and WooCommerce) and a real S3 server (MinIO): S3 client, media lifecycle, privacy, BuddyBoss privacy matrix, WooCommerce orders, bulk and background operations, failure handling (failed deletions and database writes, storage changes, retries). See [tests/integration/README.md](tests/integration/README.md).
 
 ## License
 
@@ -230,7 +229,7 @@ GPL-2.0-or-later. © Bahr Media. See [LICENSE](LICENSE).
 
 ## Deutsch
 
-**BM S3 Offload** lagert die WordPress-Mediathek in beliebigen S3-kompatiblen Objektspeicher aus – kostenlos, ohne Limits und ohne Pro-Version. Es kommt ohne SDK aus: Der S3-Client mit Signature V4 ist Teil des Plugins.
+**BM S3 Offload** lagert die WordPress-Mediathek in beliebigen S3-kompatiblen Objektspeicher aus – kostenlos, ohne Pro-Version und ohne Dateikontingente. Es kommt ohne SDK aus: Der S3-Client mit Signature V4 ist Teil des Plugins.
 
 - Alle S3-kompatiblen Anbieter (AWS, Cloudflare R2, Wasabi, Backblaze B2, DigitalOcean, Hetzner, IONOS, Scaleway, MinIO …)
 - Automatischer Offload, Massenmigration bestehender Medien (Browser und WP-CLI), lokale Kopien optional entfernen und jederzeit zurückholen

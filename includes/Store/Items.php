@@ -287,7 +287,7 @@ final class Items {
 	 * Inserts or updates an item (identified by its path).
 	 *
 	 * @param array $item Item data.
-	 * @return void
+	 * @return bool Whether the row was written.
 	 */
 	public function save( array $item ) {
 		global $wpdb;
@@ -308,7 +308,7 @@ final class Items {
 		);
 
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery -- Table name only.
-		$wpdb->query(
+		$written = $wpdb->query(
 			$wpdb->prepare(
 				"INSERT INTO {$table} (source_type, source_id, path, path_hash, bucket, object_key, is_private, local_removed, filesize, local_mtime, created_at)
 				VALUES (%s, %d, %s, %s, %s, %s, %d, %d, %d, %d, %s)
@@ -330,6 +330,7 @@ final class Items {
 		// phpcs:enable
 
 		$this->forget( array( $row['path'] ) );
+		return false !== $written;
 	}
 
 	/**

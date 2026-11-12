@@ -19,6 +19,16 @@ defined( 'ABSPATH' ) || exit;
 final class Offloader {
 
 	/**
+	 * Objects that still have to be deleted from the bucket (per site).
+	 */
+	const ORPHANS_OPTION = 'bms3o_orphans';
+
+	/**
+	 * Maximum number of tracked orphans.
+	 */
+	const ORPHANS_MAX = 5000;
+
+	/**
 	 * Settings.
 	 *
 	 * @var Settings
@@ -229,12 +239,16 @@ final class Offloader {
 			return $result;
 		}
 
+		$blocked = $this->settings->storage_error();
+		if ( '' !== $blocked ) {
+			$result['errors'] = array_fill_keys( $paths, $blocked );
+			return $result;
+		}
+
 		try {
 			$client = $this->settings->client();
 		} catch ( \InvalidArgumentException $e ) {
-			foreach ( $paths as $path ) {
-				$result['errors'][ $path ] = $e->getMessage();
-			}
+			$result['errors'] = array_fill_keys( $paths, $e->getMessage() );
 			return $result;
 		}
 
@@ -272,17 +286,7 @@ final class Offloader {
 				continue;
 			}
 
-			// The key moved within the bucket (e.g. privacy changed): remove the old object,
-			// but only if it belongs to this site's key space (never another site's object).
-			if ( $item && $item['bucket'] === $bucket && $item['object_key'] !== $key && $this->owns_key( $item['object_key'] ) ) {
-				try {
-					$client->delete( $item['object_key'] );
-				} catch ( S3Exception $e ) {
-					unset( $e ); // Leftover objects are harmless.
-				}
-			}
-
-			$this->items->save(
+			$saved = $this->items->save(
 				array(
 					'source_type'   => $source_type,
 					'source_id'     => $source_id,
@@ -295,6 +299,23 @@ final class Offloader {
 					'local_mtime'   => $mtime,
 				)
 			);
+			if ( ! $saved ) {
+				// The item still points to the previous object: keep that one. The new object
+				// is only an orphan if it lives under another key.
+				if ( ! $item || $item['object_key'] !== $key || $item['bucket'] !== $bucket ) {
+					$this->delete_or_queue( $bucket, $key, $path );
+				}
+				$result['errors'][ $path ] = __( 'The upload could not be recorded in the database.', 'bm-s3-offload' );
+				continue;
+			}
+
+			// The key moved within the bucket (e.g. privacy changed): remove the old object once
+			// the item points to the new one, but only if it belongs to this site's key space (never another
+			// site's object). Failed deletions are retried by the hourly cron.
+			if ( $item && $item['bucket'] === $bucket && $item['object_key'] !== $key && $this->owns_key( $item['object_key'] ) ) {
+				$this->delete_or_queue( $item['bucket'], $item['object_key'], $path );
+			}
+
 			$result['uploaded'][] = $path;
 
 			/**
@@ -410,6 +431,10 @@ final class Offloader {
 	 * @return string[] Paths that have been removed.
 	 */
 	public function remove_local( array $paths, $verify = true ) {
+		if ( '' !== $this->settings->storage_error() ) {
+			return array(); // Never trust objects on a storage the files were not uploaded to.
+		}
+
 		$items   = $this->items->get_many( $paths );
 		$removed = array();
 
@@ -434,8 +459,8 @@ final class Offloader {
 				} catch ( \Exception $e ) {
 					continue;
 				}
-				if ( null === $head ) {
-					continue;
+				if ( ! self::head_matches( $head, (int) $item['filesize'] ) ) {
+					continue; // Missing or different object (e.g. truncated): keep the local copy.
 				}
 			}
 
@@ -465,6 +490,12 @@ final class Offloader {
 		$items = $this->items->get_many( $paths );
 		$done  = array();
 
+		$blocked = $this->settings->storage_error();
+		if ( '' !== $blocked ) {
+			$result['errors'] = array_fill_keys( array_keys( $items ), $blocked );
+			return $result;
+		}
+
 		foreach ( $items as $path => $item ) {
 			$file = $this->absolute( $path );
 			if ( is_file( $file ) ) {
@@ -484,7 +515,10 @@ final class Offloader {
 			// The restored file is identical to the object: remember its new timestamp.
 			$item['local_mtime']   = (int) filemtime( $file );
 			$item['local_removed'] = false;
-			$this->items->save( $item );
+			if ( ! $this->items->save( $item ) ) {
+				$result['errors'][ $path ] = __( 'The restored file could not be recorded in the database.', 'bm-s3-offload' );
+				continue;
+			}
 
 			$done[]                 = $path;
 			$result['downloaded'][] = $path;
@@ -504,6 +538,11 @@ final class Offloader {
 		$items = $this->items->get_many( $paths );
 		if ( empty( $items ) ) {
 			return array();
+		}
+
+		$blocked = $this->settings->storage_error();
+		if ( '' !== $blocked ) {
+			return array_fill_keys( array_keys( $items ), $blocked );
 		}
 
 		// Every item is deleted from the bucket it was uploaded to.
@@ -541,7 +580,11 @@ final class Offloader {
 	 * @return array<string,string> Errors by path.
 	 */
 	public function set_privacy( array $paths, $is_private ) {
-		$errors = array();
+		$errors  = array();
+		$blocked = $this->settings->storage_error();
+		if ( '' !== $blocked ) {
+			return array_fill_keys( array_keys( $this->items->get_many( $paths ) ), $blocked );
+		}
 
 		foreach ( $this->items->get_many( $paths ) as $path => $item ) {
 			$key = $this->object_key( $path, (bool) $is_private );
@@ -551,7 +594,7 @@ final class Offloader {
 
 			try {
 				$client = $this->settings->client( $item['bucket'] );
-				$client->copy( $item['object_key'], $key, $this->upload_headers( $path, (bool) $is_private ) );
+				$client->copy( $item['object_key'], $key, $this->upload_headers( $path, (bool) $is_private ), (int) $item['filesize'] );
 			} catch ( \Exception $e ) {
 				$errors[ $path ] = $e->getMessage();
 				continue;
@@ -560,18 +603,130 @@ final class Offloader {
 			$old_key            = $item['object_key'];
 			$item['object_key'] = $key;
 			$item['is_private'] = (bool) $is_private;
-			$this->items->save( $item );
-
-			if ( $old_key !== $key && $this->owns_key( $old_key ) ) {
-				try {
-					$client->delete( $old_key );
-				} catch ( \Exception $e ) {
-					unset( $e ); // A leftover copy is harmless; the item points to the new key.
+			if ( ! $this->items->save( $item ) ) {
+				// The item still points to the old object: keep it and drop the copy.
+				if ( $old_key !== $key ) {
+					$this->delete_or_queue( $item['bucket'], $key, $path );
 				}
+				$errors[ $path ] = __( 'The new state could not be recorded in the database.', 'bm-s3-offload' );
+				continue;
+			}
+
+			// A leftover public copy would stay readable: report it and retry hourly.
+			if ( $old_key !== $key && $this->owns_key( $old_key ) && ! $this->delete_or_queue( $item['bucket'], $old_key, $path ) ) {
+				$errors[ $path ] = __( 'The previous copy could not be deleted yet. It stays reachable until the hourly cleanup has removed it.', 'bm-s3-offload' );
 			}
 		}
 
 		return $errors;
+	}
+
+	/**
+	 * Deletes an object that is no longer referenced, or remembers it for the
+	 * hourly cleanup when the deletion fails.
+	 *
+	 * @param string $bucket Bucket.
+	 * @param string $key    Object key.
+	 * @param string $path   Relative path the object belonged to.
+	 * @return bool Whether the object has been deleted.
+	 */
+	public function delete_or_queue( $bucket, $key, $path ) {
+		try {
+			$this->settings->client( (string) $bucket )->delete( $key );
+			return true;
+		} catch ( \Exception $e ) {
+			$this->queue_orphans( array( array( (string) $bucket, (string) $key, (string) $path ) ) );
+			return false;
+		}
+	}
+
+	/**
+	 * Remembers objects that still have to be deleted from the bucket.
+	 *
+	 * @param array<int,array{0:string,1:string,2:string}> $objects Bucket, key and path of each object.
+	 * @return void
+	 */
+	public function queue_orphans( array $objects ) {
+		$orphans = $this->orphans();
+		foreach ( $objects as $object ) {
+			$id = md5( $object[0] . '|' . $object[1] );
+			if ( ! isset( $orphans[ $id ] ) && count( $orphans ) >= self::ORPHANS_MAX ) {
+				break;
+			}
+			$orphans[ $id ] = array(
+				'bucket'   => (string) $object[0],
+				'key'      => (string) $object[1],
+				'path'     => (string) $object[2],
+				'attempts' => isset( $orphans[ $id ] ) ? (int) $orphans[ $id ]['attempts'] : 0,
+			);
+		}
+		update_option( self::ORPHANS_OPTION, $orphans, false );
+	}
+
+	/**
+	 * Objects waiting for deletion.
+	 *
+	 * @return array<string,array{bucket:string,key:string,path:string,attempts:int}>
+	 */
+	public function orphans() {
+		$orphans = get_option( self::ORPHANS_OPTION, array() );
+		return is_array( $orphans ) ? $orphans : array();
+	}
+
+	/**
+	 * Deletes queued orphans (hourly cron). Objects that are in use again
+	 * (e.g. a file was made public again) are never deleted.
+	 *
+	 * @param int $limit Maximum number of objects per run.
+	 * @return int Number of objects still waiting.
+	 */
+	public function process_orphans( $limit = 200 ) {
+		$orphans = $this->orphans();
+		if ( empty( $orphans ) || '' !== $this->settings->storage_error() || ! $this->settings->is_configured() ) {
+			return count( $orphans );
+		}
+
+		$batch = array_slice( $orphans, 0, max( 1, (int) $limit ), true );
+		$items = $this->items->get_many( array_column( $batch, 'path' ) );
+
+		$by_bucket = array();
+		foreach ( $batch as $id => $orphan ) {
+			$item = isset( $items[ $orphan['path'] ] ) ? $items[ $orphan['path'] ] : null;
+			if ( $item && $item['bucket'] === $orphan['bucket'] && $item['object_key'] === $orphan['key'] ) {
+				unset( $orphans[ $id ] ); // Referenced again.
+				continue;
+			}
+			$by_bucket[ $orphan['bucket'] ][ $orphan['key'] ] = $id;
+		}
+
+		foreach ( $by_bucket as $bucket => $keys ) {
+			try {
+				$failed = $this->settings->client( (string) $bucket )->delete_many( array_keys( $keys ) );
+			} catch ( \Exception $e ) {
+				$failed = array_fill_keys( array_keys( $keys ), $e->getMessage() );
+			}
+			foreach ( $keys as $key => $id ) {
+				if ( isset( $failed[ $key ] ) ) {
+					++$orphans[ $id ]['attempts'];
+				} else {
+					unset( $orphans[ $id ] );
+				}
+			}
+		}
+
+		update_option( self::ORPHANS_OPTION, $orphans, false );
+		return count( $orphans );
+	}
+
+	/**
+	 * Whether a HEAD response describes an object of the expected size.
+	 *
+	 * @param array|null $head          Lower-cased response headers or null.
+	 * @param int        $expected_size Expected size in bytes.
+	 * @return bool
+	 */
+	private static function head_matches( $head, $expected_size ) {
+		return is_array( $head ) && isset( $head['content-length'] ) && (int) $head['content-length'] === (int) $expected_size;
 	}
 
 	/**
@@ -580,23 +735,32 @@ final class Offloader {
 	 *
 	 * @param array $item Item row.
 	 * @param bool  $fix  Re-upload missing objects when a local copy exists.
-	 * @return string 'ok', 'fixed', 'missing' (no local copy) or an error message.
+	 * @return string 'ok', 'fixed', 'missing' (no local copy) or an error message
+	 *                (e.g. a size mismatch).
 	 */
 	public function verify( array $item, $fix = false ) {
 		try {
 			$client = $this->settings->client( $item['bucket'] );
-			if ( null !== $client->head( $item['object_key'] ) ) {
+			$head   = $client->head( $item['object_key'] );
+			if ( self::head_matches( $head, (int) $item['filesize'] ) ) {
 				return 'ok';
 			}
-			$file = $this->absolute( $item['path'] );
+			$state = null === $head ? 'missing' : sprintf( 'size mismatch (%s instead of %d bytes)', isset( $head['content-length'] ) ? (int) $head['content-length'] : '?', (int) $item['filesize'] );
+			$file  = $this->absolute( $item['path'] );
 			if ( ! $fix || ! is_file( $file ) ) {
-				return 'missing';
+				return $state;
+			}
+			$blocked = $this->settings->storage_error();
+			if ( '' !== $blocked ) {
+				return $blocked;
 			}
 			$client->put_file( $item['object_key'], $file, $this->upload_headers( $item['path'], $item['is_private'] ) );
 			$item['filesize']      = (int) filesize( $file );
 			$item['local_mtime']   = (int) filemtime( $file );
 			$item['local_removed'] = false;
-			$this->items->save( $item );
+			if ( ! $this->items->save( $item ) ) {
+				return 'uploaded, but the database could not be updated';
+			}
 			return 'fixed';
 		} catch ( \Exception $e ) {
 			return $e->getMessage();

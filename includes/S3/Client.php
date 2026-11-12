@@ -32,6 +32,21 @@ class Client {
 	const PART_SIZE = 8388608; // 8 MiB.
 
 	/**
+	 * Objects larger than this are copied with a multipart copy (S3 limit for CopyObject).
+	 */
+	const COPY_THRESHOLD = 5368709120; // 5 GiB.
+
+	/**
+	 * Part size of a multipart copy (adapted so that at most 10,000 parts are needed).
+	 */
+	const COPY_PART_SIZE = 536870912; // 512 MiB.
+
+	/**
+	 * HTTP status codes that are retried (throttling and temporary server errors).
+	 */
+	const RETRY_STATUS = array( 429, 500, 502, 503, 504 );
+
+	/**
 	 * Scheme of the endpoint ("https" or "http").
 	 *
 	 * @var string
@@ -88,6 +103,27 @@ class Client {
 	private $timeout;
 
 	/**
+	 * Number of retries for temporary failures.
+	 *
+	 * @var int
+	 */
+	private $retries;
+
+	/**
+	 * Size above which copies use a multipart copy.
+	 *
+	 * @var int
+	 */
+	private $copy_threshold;
+
+	/**
+	 * Minimum part size of a multipart copy.
+	 *
+	 * @var int
+	 */
+	private $copy_part_size;
+
+	/**
 	 * Constructor.
 	 *
 	 * @param array $config {
@@ -100,6 +136,9 @@ class Client {
 	 *     @type string $secret_key Secret access key.
 	 *     @type bool   $path_style Use path-style URLs.
 	 *     @type int    $timeout    HTTP timeout in seconds.
+	 *     @type int    $retries    Retries for network errors, throttling and 5xx responses (default 2).
+	 *     @type int    $copy_threshold Size in bytes above which copies use a multipart copy (default 5 GiB).
+	 *     @type int    $copy_part_size Part size of a multipart copy (default 512 MiB, minimum 5 MiB).
 	 * }
 	 * @throws \InvalidArgumentException When the endpoint is not a valid URL.
 	 */
@@ -121,6 +160,10 @@ class Client {
 		$this->secret_key = isset( $config['secret_key'] ) ? (string) $config['secret_key'] : '';
 		$this->path_style = ! empty( $config['path_style'] );
 		$this->timeout    = ! empty( $config['timeout'] ) ? (int) $config['timeout'] : 300;
+		$this->retries    = isset( $config['retries'] ) ? max( 0, (int) $config['retries'] ) : 2;
+
+		$this->copy_threshold = ! empty( $config['copy_threshold'] ) ? (int) $config['copy_threshold'] : self::COPY_THRESHOLD;
+		$this->copy_part_size = max( 5242880, ! empty( $config['copy_part_size'] ) ? (int) $config['copy_part_size'] : self::COPY_PART_SIZE );
 	}
 
 	/**
@@ -253,17 +296,23 @@ class Client {
 	/**
 	 * Copies an object within the bucket (server side, no download/upload).
 	 *
-	 * Objects larger than 5 GiB would need a multipart copy; media files of
-	 * that size are not supported by WordPress anyway.
+	 * Objects larger than 5 GiB are copied with a multipart copy when their size
+	 * is passed.
 	 *
-	 * @param string $source_key Source key.
-	 * @param string $target_key Target key.
-	 * @param array  $headers    Headers of the new object. When given, they replace the
-	 *                           metadata (Content-Type, Cache-Control, x-amz-acl …).
+	 * @param string   $source_key Source key.
+	 * @param string   $target_key Target key.
+	 * @param array    $headers    Headers of the new object. When given, they replace the
+	 *                             metadata (Content-Type, Cache-Control, x-amz-acl …).
+	 * @param int|null $size       Size of the source object in bytes, if known.
 	 * @return void
 	 * @throws S3Exception On failure.
 	 */
-	public function copy( $source_key, $target_key, array $headers = array() ) {
+	public function copy( $source_key, $target_key, array $headers = array(), $size = null ) {
+		if ( null !== $size && (int) $size > $this->copy_threshold ) {
+			$this->multipart_copy( $source_key, $target_key, $headers, (int) $size );
+			return;
+		}
+
 		$directive                           = empty( $headers ) ? 'COPY' : 'REPLACE';
 		$headers['x-amz-copy-source']        = '/' . rawurlencode( $this->bucket ) . '/' . self::encode_key( ltrim( (string) $source_key, '/' ) );
 		$headers['x-amz-metadata-directive'] = $directive;
@@ -507,6 +556,77 @@ class Client {
 		}
 		fclose( $handle ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose
 
+		$this->complete_multipart( $key, $upload_id, $parts );
+	}
+
+	/**
+	 * Copies a large object in parts (UploadPartCopy).
+	 *
+	 * @param string $source_key Source key.
+	 * @param string $target_key Target key.
+	 * @param array  $headers    Headers of the new object.
+	 * @param int    $size       Size of the source object in bytes.
+	 * @return void
+	 * @throws S3Exception On failure.
+	 */
+	private function multipart_copy( $source_key, $target_key, array $headers, $size ) {
+		if ( ! isset( $headers['Content-Type'] ) ) {
+			$headers['Content-Type'] = 'application/octet-stream';
+		}
+
+		$response  = $this->request( 'POST', $target_key, array( 'uploads' => '' ), $headers );
+		$upload_id = self::text( self::parse_xml( $response['body'] ), 'UploadId' );
+		if ( '' === $upload_id ) {
+			throw new S3Exception( 'Multipart copy could not be initiated.' );
+		}
+
+		$source    = '/' . rawurlencode( $this->bucket ) . '/' . self::encode_key( ltrim( (string) $source_key, '/' ) );
+		$part_size = max( $this->copy_part_size, (int) ceil( $size / 10000 ) );
+		$parts     = array();
+
+		try {
+			for ( $number = 1, $start = 0; $start < $size; ++$number, $start += $part_size ) {
+				$end      = min( $size, $start + $part_size ) - 1;
+				$response = $this->request(
+					'PUT',
+					$target_key,
+					array(
+						'partNumber' => (string) $number,
+						'uploadId'   => $upload_id,
+					),
+					array(
+						'x-amz-copy-source'       => $source,
+						'x-amz-copy-source-range' => 'bytes=' . $start . '-' . $end,
+					)
+				);
+				$doc      = self::parse_xml( $response['body'] );
+				if ( $doc && 'Error' === $doc->getName() ) {
+					throw new S3Exception( self::text( $doc, 'Message' ), 500, self::text( $doc, 'Code' ) );
+				}
+				$etag = self::text( $doc, 'ETag' );
+				if ( '' === $etag ) {
+					throw new S3Exception( 'Missing ETag for copied part.' );
+				}
+				$parts[ $number ] = $etag;
+			}
+		} catch ( S3Exception $e ) {
+			$this->abort_multipart( $target_key, $upload_id );
+			throw $e;
+		}
+
+		$this->complete_multipart( $target_key, $upload_id, $parts );
+	}
+
+	/**
+	 * Completes a multipart upload (aborts it on failure).
+	 *
+	 * @param string            $key       Object key.
+	 * @param string            $upload_id Upload ID.
+	 * @param array<int,string> $parts     ETags by part number.
+	 * @return void
+	 * @throws S3Exception On failure.
+	 */
+	private function complete_multipart( $key, $upload_id, array $parts ) {
 		$xml = '<?xml version="1.0" encoding="UTF-8"?><CompleteMultipartUpload>';
 		foreach ( $parts as $number => $etag ) {
 			$xml .= '<Part><PartNumber>' . (int) $number . '</PartNumber><ETag>' . htmlspecialchars( $etag, ENT_XML1, 'UTF-8' ) . '</ETag></Part>';
@@ -564,7 +684,8 @@ class Client {
 	}
 
 	/**
-	 * Performs a signed request.
+	 * Performs a signed request and retries network errors, throttling and
+	 * temporary server errors with exponential backoff (0.5 s, 1 s … plus jitter).
 	 *
 	 * @param string $method   HTTP method.
 	 * @param string $key      Object key ('' for bucket-level operations).
@@ -576,6 +697,35 @@ class Client {
 	 * @throws S3Exception On transport or S3 errors.
 	 */
 	private function request( $method, $key, array $query = array(), array $headers = array(), $body = '', $filename = '' ) {
+		for ( $attempt = 0; ; ++$attempt ) {
+			$started = microtime( true );
+			try {
+				return $this->send( $method, $key, $query, $headers, $body, $filename );
+			} catch ( S3Exception $e ) {
+				$status = $e->get_http_status();
+				// Requests that ran for a long time (e.g. timeouts of large uploads) are not
+				// repeated, so a request never blocks for a multiple of the timeout.
+				if ( $attempt >= $this->retries || ( 0 !== $status && ! in_array( $status, self::RETRY_STATUS, true ) ) || microtime( true ) - $started > 60 ) {
+					throw $e;
+				}
+				usleep( (int) ( 500000 * pow( 2, $attempt ) ) + wp_rand( 0, 250000 ) );
+			}
+		}
+	}
+
+	/**
+	 * Performs a single signed request.
+	 *
+	 * @param string $method   HTTP method.
+	 * @param string $key      Object key ('' for bucket-level operations).
+	 * @param array  $query    Query parameters.
+	 * @param array  $headers  Request headers.
+	 * @param string $body     Request body.
+	 * @param string $filename Stream the response body into this file.
+	 * @return array{status:int, headers:array, body:string}
+	 * @throws S3Exception On transport or S3 errors.
+	 */
+	private function send( $method, $key, array $query = array(), array $headers = array(), $body = '', $filename = '' ) {
 		list( $host, $path ) = $this->address( $key );
 
 		$time         = time();

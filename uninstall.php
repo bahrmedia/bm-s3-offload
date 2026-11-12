@@ -35,11 +35,13 @@ function bms3o_uninstall_site() {
 
 	// Files that only exist in the bucket would lose their mapping: keep everything
 	// until "Leave the bucket" (or "Restore local copies") has been run.
-	$bucket_only = (int) $wpdb->get_var( "SHOW TABLES LIKE '{$table}'" ) // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery
-		? (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE local_removed = 1" ) // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery
-		: 0;
-	if ( $bucket_only > 0 ) {
-		return;
+	$exists = $table === $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	if ( $exists ) {
+		$bucket_only = $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE local_removed = 1" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery
+		// Keep everything when the count fails (null) or files exist only in the bucket.
+		if ( null === $bucket_only || (int) $bucket_only > 0 ) {
+			return;
+		}
 	}
 
 	$wpdb->query( "DROP TABLE IF EXISTS {$table}" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery,WordPress.DB.DirectDatabaseQuery.SchemaChange
@@ -48,6 +50,8 @@ function bms3o_uninstall_site() {
 	delete_option( 'bms3o_retry' );
 	delete_option( 'bms3o_background' );
 	delete_option( 'bms3o_background_lock' );
+	delete_option( 'bms3o_orphans' );
+	delete_option( 'bms3o_storage' );
 	delete_transient( 'bms3o_bb_dirs' );
 }
 

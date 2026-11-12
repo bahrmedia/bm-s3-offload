@@ -2,6 +2,25 @@
 
 All notable changes to this project are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] – 2026-11-12
+
+### Fixed
+
+- Uninstall with "Remove data" dropped the offload table even when files existed only in the bucket (the table check always failed).
+- Making files private: when the previous public copy could not be deleted, the change was reported as successful and the public URL stayed reachable. It is now reported and the copy is removed by an hourly cleanup. The same applies when a re-upload moves a file.
+- Changing the endpoint while files are offloaded is only accepted with the confirmation that all objects have been copied. If the endpoint is changed by constant or environment variable, all bucket operations (uploads, deletions, removal of local copies, privacy changes) are paused until `wp bm-s3 storage confirm`.
+- Failed database writes are detected: objects are only deleted after the new state has been recorded.
+- Objects of deleted media whose deletion failed are no longer forgotten but retried by the hourly cleanup.
+
+### Changed
+
+- Local copies are only removed when the object in the bucket has the same size; `wp bm-s3 verify` also reports and repairs size mismatches.
+- When the secret key cannot be encrypted, it is not saved (previously stored in plain text).
+- The S3 client retries network errors, throttling (429) and temporary server errors (5xx) twice with backoff.
+- Objects larger than 5 GiB are copied with a multipart copy (making them private or public).
+- `wp bm-s3 storage` and `wp bm-s3 status` show the storage check and pending cleanups.
+- README: dated, per-product comparison instead of generalised claims; precise wording on tests, limits and "private".
+
 ## [1.0.0] – 2026-11-11
 
 ### Added
@@ -31,7 +50,7 @@ All notable changes to this project are documented in this file. The format foll
 
 ### Security
 
-- Private files get signed URLs only in access-checked contexts (BuddyBoss access checks, administrators); content filters and generic attachment URLs never sign private files.
+- Restricted files (BuddyBoss media, WooCommerce and Easy Digital Downloads files) get signed URLs only in access-checked contexts (BuddyBoss/WooCommerce access checks, administrators); content filters and generic attachment URLs never sign them. Private media library files are delivered to everybody with expiring signed URLs.
 - BuddyBoss media directories stay private even when the BuddyBoss integration is switched off.
 - Prefix combinations that would place private files in the public area are rejected.
 - On multisite the settings are reserved to super admins.

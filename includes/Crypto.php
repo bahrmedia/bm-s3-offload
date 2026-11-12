@@ -23,20 +23,26 @@ final class Crypto {
 	/**
 	 * Encrypts a value. Empty values stay empty.
 	 *
+	 * Never falls back to plain text: callers keep the previous value instead.
+	 *
 	 * @param string $plain Plain text.
 	 * @return string
+	 * @throws \RuntimeException When the value cannot be encrypted.
 	 */
 	public static function encrypt( $plain ) {
 		$plain = (string) $plain;
-		if ( '' === $plain || ! self::available() ) {
+		if ( '' === $plain ) {
 			return $plain;
+		}
+		if ( ! self::available() ) {
+			throw new \RuntimeException( 'libsodium is not available.' );
 		}
 
 		try {
 			$nonce  = random_bytes( SODIUM_CRYPTO_SECRETBOX_NONCEBYTES );
 			$cipher = sodium_crypto_secretbox( $plain, $nonce, self::key() );
 		} catch ( \Exception $e ) {
-			return $plain;
+			throw new \RuntimeException( $e->getMessage(), 0, $e );
 		}
 
 		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Binary-safe storage.

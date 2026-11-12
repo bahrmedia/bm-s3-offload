@@ -66,6 +66,8 @@ final class Command {
 			'private'         => $stats['private'],
 			'pending_offload' => $this->plugin->bulk->remaining( 'offload' ),
 			'pending_retries' => count( $this->plugin->attachments->pending_retries() ),
+			'pending_cleanup' => count( $this->plugin->offloader->orphans() ),
+			'storage'         => '' === $settings->storage_error() ? 'ok' : 'changed – see "wp bm-s3 storage"',
 		);
 
 		$rows = array();
@@ -331,6 +333,49 @@ final class Command {
 			WP_CLI::error( 'Pass either --private or --public.' );
 		}
 		$this->execute( empty( $assoc_args['private'] ) ? 'make_public' : 'make_private', $args, array() );
+	}
+
+	/**
+	 * Shows or confirms the storage the files are offloaded to.
+	 *
+	 * The plugin pauses all bucket operations when the endpoint differs from
+	 * the storage the files were uploaded to. Copy all objects to the new
+	 * storage first (e.g. `rclone sync old:bucket new:bucket`), check them with
+	 * `wp bm-s3 verify` and confirm the change.
+	 *
+	 * ## OPTIONS
+	 *
+	 * [<command>]
+	 * : status (default) or confirm.
+	 *
+	 * ## EXAMPLES
+	 *
+	 *     wp bm-s3 storage
+	 *     wp bm-s3 storage confirm
+	 *
+	 * @param array $args       Positional arguments.
+	 * @param array $assoc_args Named arguments.
+	 * @return void
+	 */
+	public function storage( $args, $assoc_args ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- WP-CLI signature.
+		$settings = $this->plugin->settings;
+		$command  = isset( $args[0] ) ? $args[0] : 'status';
+
+		if ( 'confirm' === $command ) {
+			$settings->confirm_storage();
+			WP_CLI::success( sprintf( 'Storage confirmed: %s. Run "wp bm-s3 verify" to check the objects.', get_option( $settings::STORAGE_OPTION, '' ) ) );
+			return;
+		}
+		if ( 'status' !== $command ) {
+			WP_CLI::error( 'Use "status" or "confirm".' );
+		}
+
+		$error = $settings->storage_error();
+		if ( '' !== $error ) {
+			WP_CLI::warning( $error );
+			return;
+		}
+		WP_CLI::success( sprintf( 'Files are offloaded to %s.', get_option( $settings::STORAGE_OPTION, '' ) ) );
 	}
 
 	/**

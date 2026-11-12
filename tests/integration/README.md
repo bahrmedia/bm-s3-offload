@@ -13,6 +13,7 @@ Platform and WooCommerce, MinIO as S3 server.
 | `04-bulk.php` | Bulk operations, background runner, verify, WebP/AVIF sidecars |
 | `05-buddyboss.php` | BuddyBoss privacy (only me, public, private groups), e-mail links, direct mode, avatars, cover images |
 | `06-woocommerce.php` | Downloadable products: order → signed redirect → correct file |
+| `07-robustness.php` | Failed deletions (privacy change, deleted media) and cleanup, failed database writes, size check before removing local copies, storage change guard, retries, multipart copy, uninstall guard |
 
 ## Running locally
 

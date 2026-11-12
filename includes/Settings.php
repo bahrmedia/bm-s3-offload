@@ -8,6 +8,7 @@
 namespace BahrMedia\S3Offload;
 
 use BahrMedia\S3Offload\S3\Client;
+use BahrMedia\S3Offload\Store\Items;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -28,6 +29,11 @@ final class Settings {
 	const OPTION = 'bms3o_settings';
 
 	/**
+	 * Storage (normalised endpoint) the offloaded files were uploaded to.
+	 */
+	const STORAGE_OPTION = 'bms3o_storage';
+
+	/**
 	 * Settings that are stored encrypted.
 	 */
 	const SECRETS = array( 'secret_key' );
@@ -45,6 +51,13 @@ final class Settings {
 	 * @var array<int,Client>
 	 */
 	private $clients = array();
+
+	/**
+	 * Result of storage_error() per site (request cache).
+	 *
+	 * @var array<int,string>
+	 */
+	private $storage_errors = array();
 
 	/**
 	 * Default values. The type of each default defines the type of the setting.
@@ -176,7 +189,12 @@ final class Settings {
 				$secret = trim( (string) $input[ $key ] );
 				// An empty field keeps the stored secret.
 				if ( '' !== $secret ) {
-					$stored[ $key ] = Crypto::encrypt( $secret );
+					try {
+						$stored[ $key ] = Crypto::encrypt( $secret );
+					} catch ( \RuntimeException $e ) {
+						// Never store the secret in plain text; keep the previous value.
+						$encrypt_error = __( 'The secret key could not be encrypted and was not saved. Define BMS3O_SECRET_KEY in wp-config.php instead.', 'bm-s3-offload' );
+					}
 				}
 				continue;
 			}
@@ -186,6 +204,7 @@ final class Settings {
 
 		$previous = get_option( self::OPTION, array() );
 		$previous = is_array( $previous ) ? $previous : array();
+		$storage  = $this->check_storage_change( $stored, $previous, ! empty( $input['storage_moved'] ) );
 		$errors   = $this->validate_prefixes(
 			$this->is_overridden( 'object_prefix' ) ? (string) $this->get( 'object_prefix' ) : (string) ( isset( $stored['object_prefix'] ) ? $stored['object_prefix'] : $defaults['object_prefix'] ),
 			$this->is_overridden( 'private_prefix' ) ? (string) $this->get( 'private_prefix' ) : (string) ( isset( $stored['private_prefix'] ) ? $stored['private_prefix'] : $defaults['private_prefix'] )
@@ -196,9 +215,125 @@ final class Settings {
 			}
 		}
 
+		if ( '' !== $storage ) {
+			$errors[] = $storage;
+		}
+		if ( isset( $encrypt_error ) ) {
+			$errors[] = $encrypt_error;
+		}
+
 		update_option( self::OPTION, $stored, true );
 		$this->flush();
 		return $errors;
+	}
+
+	/**
+	 * Handles a change of the endpoint while saving.
+	 *
+	 * The items table only knows bucket and key of each object, not the
+	 * storage. Switching to another storage while files are offloaded would
+	 * make every item point to objects that may not exist there (or belong to
+	 * somebody else). The change is therefore only accepted when the user
+	 * confirms that all objects have been copied to the new storage (e.g. with
+	 * rclone); otherwise the previous endpoint is kept.
+	 *
+	 * @param array $stored    New settings (changed in place).
+	 * @param array $previous  Previously stored settings.
+	 * @param bool  $confirmed The user confirmed that the objects were copied.
+	 * @return string Error message or ''.
+	 */
+	private function check_storage_change( array &$stored, array $previous, $confirmed ) {
+		$new_endpoint = $this->is_overridden( 'endpoint' ) ? (string) $this->get( 'endpoint' ) : ( isset( $stored['endpoint'] ) ? (string) $stored['endpoint'] : '' );
+		$recorded     = (string) get_option( self::STORAGE_OPTION, '' );
+		if ( '' === $recorded && isset( $previous['endpoint'] ) ) {
+			$recorded = self::storage_id( (string) $previous['endpoint'] );
+		}
+
+		$new = self::storage_id( $new_endpoint );
+		if ( '' === $new || $new === $recorded ) {
+			return '';
+		}
+		if ( '' === $recorded || $confirmed || ! self::has_items() ) {
+			update_option( self::STORAGE_OPTION, $new, true );
+			return '';
+		}
+		if ( $this->is_overridden( 'endpoint' ) ) {
+			return ''; // Cannot be reverted here; storage_error() pauses all bucket operations.
+		}
+
+		$stored['endpoint'] = isset( $previous['endpoint'] ) ? $previous['endpoint'] : '';
+		return __( 'The endpoint was not changed because files are offloaded to the current storage. Copy all objects to the new storage first (e.g. with rclone), then change the endpoint again and confirm the copy.', 'bm-s3-offload' );
+	}
+
+	/**
+	 * Normalised storage identity of an endpoint (scheme, host and port).
+	 *
+	 * @param string $endpoint Endpoint URL.
+	 * @return string
+	 */
+	public static function storage_id( $endpoint ) {
+		$parts = wp_parse_url( trim( (string) $endpoint ) );
+		if ( empty( $parts['host'] ) ) {
+			return '';
+		}
+		$scheme = isset( $parts['scheme'] ) && 'http' === strtolower( $parts['scheme'] ) ? 'http' : 'https';
+		$port   = isset( $parts['port'] ) && (int) $parts['port'] !== ( 'http' === $scheme ? 80 : 443 ) ? ':' . (int) $parts['port'] : '';
+		return $scheme . '://' . strtolower( $parts['host'] ) . $port;
+	}
+
+	/**
+	 * Whether any file is recorded as offloaded.
+	 *
+	 * @return bool
+	 */
+	private static function has_items() {
+		return ( new Items() )->count() > 0;
+	}
+
+	/**
+	 * Error message when the configured endpoint differs from the storage the
+	 * files were offloaded to, '' otherwise. While the storage differs, the
+	 * plugin does not upload, delete or move objects and keeps local copies.
+	 *
+	 * This happens when the endpoint is changed by a constant or environment
+	 * variable; the admin screen refuses such a change without confirmation.
+	 *
+	 * @return string
+	 */
+	public function storage_error() {
+		$blog_id = get_current_blog_id();
+		if ( isset( $this->storage_errors[ $blog_id ] ) ) {
+			return $this->storage_errors[ $blog_id ];
+		}
+
+		$current  = self::storage_id( (string) $this->get( 'endpoint' ) );
+		$recorded = (string) get_option( self::STORAGE_OPTION, '' );
+		$error    = '';
+		if ( '' !== $current && $current !== $recorded ) {
+			if ( '' === $recorded || ! self::has_items() ) {
+				update_option( self::STORAGE_OPTION, $current, true ); // First use (or upgrade from 1.0.0).
+			} else {
+				$error = sprintf(
+					/* translators: 1: previous storage, 2: configured storage */
+					__( 'The files were offloaded to %1$s, but the endpoint is now %2$s. Bucket operations are paused. Copy all objects to the new storage, then confirm it with "wp bm-s3 storage confirm" or in the settings.', 'bm-s3-offload' ),
+					$recorded,
+					$current
+				);
+			}
+		}
+
+		$this->storage_errors[ $blog_id ] = $error;
+		return $error;
+	}
+
+	/**
+	 * Confirms that all objects have been copied to the configured storage.
+	 *
+	 * @return void
+	 */
+	public function confirm_storage() {
+		update_option( self::STORAGE_OPTION, self::storage_id( (string) $this->get( 'endpoint' ) ), true );
+		$this->flush();
 	}
 
 	/**
@@ -246,8 +381,9 @@ final class Settings {
 	 * @return void
 	 */
 	public function flush() {
-		$this->resolved = array();
-		$this->clients  = array();
+		$this->resolved       = array();
+		$this->clients        = array();
+		$this->storage_errors = array();
 	}
 
 	/**
