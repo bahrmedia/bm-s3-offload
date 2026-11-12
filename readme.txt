@@ -4,7 +4,7 @@ Tags: s3, offload, buddyboss, woocommerce, cdn
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.0.10
+Stable tag: 1.0.11
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -78,6 +78,10 @@ No. URLs in the database stay local and are rewritten on output, so you can deac
 s3:PutObject, s3:GetObject, s3:DeleteObject, s3:ListBucket and the multipart upload permissions on the bucket.
 
 == Changelog ==
+
+= 1.0.11 =
+* Fixed: the hourly retry of a failed upload of a media translation failed on the files of the original.
+* Fixed: entries of the retry lists could be lost when a request changed them while the hourly cron worked them off.
 
 = 1.0.10 =
 * Fixed: when a translation of an attachment was deleted and the handover of the shared files failed, the files were deleted from the bucket anyway. Shared files are now always kept, the handover is retried.

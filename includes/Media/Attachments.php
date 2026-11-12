@@ -9,6 +9,7 @@ namespace BahrMedia\S3Offload\Media;
 
 use BahrMedia\S3Offload\Integrations\BuddyBoss;
 use BahrMedia\S3Offload\Integrations\WooCommerce;
+use BahrMedia\S3Offload\Lock;
 use BahrMedia\S3Offload\Offloader;
 use BahrMedia\S3Offload\Store\Items;
 
@@ -1099,13 +1100,16 @@ final class Attachments {
 	 * @return void
 	 */
 	private function add_retry( $attachment_id ) {
-		$retry = get_option( self::RETRY_OPTION, array() );
-		$retry = is_array( $retry ) ? $retry : array();
-		if ( ! isset( $retry[ $attachment_id ] ) && count( $retry ) >= 1000 ) {
-			return; // Bulk tools will catch the rest.
-		}
-		$retry[ $attachment_id ] = isset( $retry[ $attachment_id ] ) ? (int) $retry[ $attachment_id ] : 0;
-		update_option( self::RETRY_OPTION, $retry, false );
+		$this->change_list(
+			self::RETRY_OPTION,
+			static function ( array $retry ) use ( $attachment_id ) {
+				if ( ! isset( $retry[ $attachment_id ] ) && count( $retry ) >= 1000 ) {
+					return $retry; // Bulk tools will catch the rest.
+				}
+				$retry[ $attachment_id ] = isset( $retry[ $attachment_id ] ) ? (int) $retry[ $attachment_id ] : 0;
+				return $retry;
+			}
+		);
 	}
 
 	/**
@@ -1116,10 +1120,39 @@ final class Attachments {
 	 */
 	private function clear_retry( $attachment_id ) {
 		$retry = get_option( self::RETRY_OPTION, array() );
-		if ( is_array( $retry ) && isset( $retry[ $attachment_id ] ) ) {
-			unset( $retry[ $attachment_id ] );
-			update_option( self::RETRY_OPTION, $retry, false );
+		if ( ! is_array( $retry ) || ! isset( $retry[ $attachment_id ] ) ) {
+			return; // Cheap check first: most attachments are not in the list.
 		}
+		$this->change_list(
+			self::RETRY_OPTION,
+			static function ( array $retry ) use ( $attachment_id ) {
+				unset( $retry[ $attachment_id ] );
+				return $retry;
+			}
+		);
+	}
+
+	/**
+	 * Changes a list option (retries, handovers) under a short lock: requests
+	 * that add entries and the cron that works them off run at the same time,
+	 * and a plain read-modify-write would lose the changes of one of them.
+	 *
+	 * @param string   $option Option name.
+	 * @param callable $change Receives the current list (fresh from the database), returns the new one.
+	 * @return void
+	 */
+	private function change_list( $option, callable $change ) {
+		$lock = $option . '_lock';
+		// Without the lock (held longer than expected), the change is still made: a rare
+		// lost update is better than dropping this one for sure.
+		$token = Lock::acquire( $lock, 30, 5.0 );
+		Lock::flush_cache( $option );
+		$list = get_option( $option, array() );
+		$new  = $change( is_array( $list ) ? $list : array() );
+		if ( $new !== $list ) {
+			update_option( $option, $new, false );
+		}
+		Lock::release( $lock, $token );
 	}
 
 	/**
@@ -1137,23 +1170,41 @@ final class Attachments {
 			return;
 		}
 
+		// Uploads take long: the results are applied to the list afterwards, under its lock.
+		$done   = array();
+		$failed = array();
 		foreach ( array_slice( $retry, 0, 25, true ) as $attachment_id => $attempts ) {
 			if ( ! get_post( $attachment_id ) || $attempts + 1 >= self::MAX_ATTEMPTS ) {
-				unset( $retry[ $attachment_id ] );
+				$done[] = $attachment_id;
 				continue;
 			}
-			$result = $this->offloader->upload( Items::SOURCE_POST, (int) $attachment_id, $this->paths( (int) $attachment_id ), $this->is_private( (int) $attachment_id ) );
+			// Files another attachment with the same main file uploaded are not its own (media translations).
+			$paths  = $this->own_paths( (int) $attachment_id, $this->paths( (int) $attachment_id ) );
+			$result = $this->offloader->upload( Items::SOURCE_POST, (int) $attachment_id, $paths, $this->is_private( (int) $attachment_id ) );
 			if ( empty( $result['errors'] ) ) {
-				unset( $retry[ $attachment_id ] );
+				$done[] = $attachment_id;
 				if ( $this->offloader->settings()->get( 'remove_local' ) && $this->can_remove_local( (int) $attachment_id ) ) {
-					$this->offloader->queue_local_removal( $this->paths( (int) $attachment_id ) );
+					$this->offloader->queue_local_removal( $paths );
 				}
 			} else {
-				$retry[ $attachment_id ] = $attempts + 1;
+				$failed[ $attachment_id ] = $attempts + 1;
 			}
 		}
 
-		update_option( self::RETRY_OPTION, $retry, false );
+		$this->change_list(
+			self::RETRY_OPTION,
+			static function ( array $retry ) use ( $done, $failed ) {
+				foreach ( $done as $attachment_id ) {
+					unset( $retry[ $attachment_id ] );
+				}
+				foreach ( $failed as $attachment_id => $attempts ) {
+					if ( isset( $retry[ $attachment_id ] ) ) { // Not removed meanwhile (e.g. offloaded by another request).
+						$retry[ $attachment_id ] = max( (int) $retry[ $attachment_id ], $attempts );
+					}
+				}
+				return $retry;
+			}
+		);
 	}
 
 	/**
@@ -1179,15 +1230,18 @@ final class Attachments {
 		if ( empty( $paths ) ) {
 			return;
 		}
-		$pending = get_option( self::HANDOVER_OPTION, array() );
-		$pending = is_array( $pending ) ? $pending : array();
-		foreach ( $paths as $path ) {
-			if ( count( $pending ) >= 5000 ) {
-				break; // The files are kept anyway; they are only not reassigned.
+		$this->change_list(
+			self::HANDOVER_OPTION,
+			static function ( array $pending ) use ( $paths, $file ) {
+				foreach ( $paths as $path ) {
+					if ( count( $pending ) >= 5000 ) {
+						break; // The files are kept anyway; they are only not reassigned.
+					}
+					$pending[ $path ] = (string) $file;
+				}
+				return $pending;
 			}
-			$pending[ $path ] = (string) $file;
-		}
-		update_option( self::HANDOVER_OPTION, $pending, false );
+		);
 	}
 
 	/**
@@ -1204,13 +1258,14 @@ final class Attachments {
 		}
 
 		$groups = array();
+		$done   = array();
 		$batch  = array_slice( $pending, 0, 500, true );
 		$this->offloader->items()->forget( array_keys( $batch ) );
 		$items = $this->offloader->items()->get_many( array_keys( $batch ) );
 		foreach ( $batch as $path => $file ) {
 			$item = isset( $items[ $path ] ) ? $items[ $path ] : null;
 			if ( ! $item || Items::SOURCE_POST !== $item['source_type'] || get_post( (int) $item['source_id'] ) ) {
-				unset( $pending[ $path ] ); // Gone or owned by an existing attachment already.
+				$done[] = $path; // Gone or owned by an existing attachment already.
 				continue;
 			}
 			$groups[ $file ][] = $path;
@@ -1225,12 +1280,18 @@ final class Attachments {
 				$failed = $this->offloader->items()->reassign( $paths, Items::SOURCE_POST, $owners[0] );
 				$this->adopt_privacy( $owners[0], $items[ $paths[0] ] );
 			}
-			foreach ( array_diff( $paths, $failed ) as $path ) {
-				unset( $pending[ $path ] );
-			}
+			$done = array_merge( $done, array_diff( $paths, $failed ) );
 		}
 
-		update_option( self::HANDOVER_OPTION, $pending, false );
+		$this->change_list(
+			self::HANDOVER_OPTION,
+			static function ( array $pending ) use ( $done ) {
+				foreach ( $done as $path ) {
+					unset( $pending[ $path ] );
+				}
+				return $pending;
+			}
+		);
 	}
 
 	/**

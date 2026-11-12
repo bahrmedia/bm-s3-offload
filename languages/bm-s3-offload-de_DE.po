@@ -1,6 +1,6 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: BM S3 Offload 1.0.10\n"
+"Project-Id-Version: BM S3 Offload 1.0.11\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/bm-s3-offload\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -590,7 +590,7 @@ msgstr "Die PHP-Erweiterung SimpleXML fehlt. Das Auflisten von Objekten und Fehl
 msgid "Errors while synchronising %s"
 msgstr "Fehler beim Synchronisieren von %s"
 
-#: includes/Media/Attachments.php:394
+#: includes/Media/Attachments.php:395
 msgid "Files in protected directories (BuddyBoss, WooCommerce, Easy Digital Downloads) cannot be made public."
 msgstr "Dateien in geschützten Verzeichnissen (BuddyBoss, WooCommerce, Easy Digital Downloads) können nicht öffentlich gemacht werden."
 
@@ -708,16 +708,16 @@ msgstr "Der Endpunkt wurde nicht geändert, weil Dateien auf den aktuellen Speic
 msgid "The files were offloaded to %1$s, but the endpoint is now %2$s. Bucket operations are paused. Copy all objects to the new storage, then confirm it with \"wp bm-s3 storage confirm\" or in the settings."
 msgstr "Die Dateien wurden auf %1$s ausgelagert, der Endpunkt ist jetzt aber %2$s. Bucket-Operationen sind pausiert. Bitte alle Objekte auf den neuen Speicher kopieren und das mit \"wp bm-s3 storage confirm\" oder in den Einstellungen bestätigen."
 
-#: includes/Media/Attachments.php:280
+#: includes/Media/Attachments.php:281
 msgid "WooCommerce downloads"
 msgstr "WooCommerce-Downloads"
 
-#: includes/Media/Attachments.php:285
+#: includes/Media/Attachments.php:286
 msgid "BuddyBoss media"
 msgstr "BuddyBoss-Medien"
 
 #. translators: 1: number of files, 2: e.g. "WooCommerce downloads"
-#: includes/Media/Attachments.php:328
+#: includes/Media/Attachments.php:329
 #, php-format
 msgid "%1$d file of the %2$s exists only in the bucket, but the integration is inactive or switched off, so it cannot be delivered. Switch the integration on or run \"Restore local copies\" in the tools tab."
 msgid_plural "%1$d files of the %2$s exist only in the bucket, but the integration is inactive or switched off, so they cannot be delivered. Switch the integration on or run \"Restore local copies\" in the tools tab."

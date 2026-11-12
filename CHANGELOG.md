@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.0.11] – 2026-11-12
+
+### Fixed
+
+- The hourly retry of failed uploads tried to upload all files of an attachment, also those another attachment with the same main file had uploaded (media translations). It failed with "Path is already used" until the attachment was dropped after five attempts. It now skips these files, like the upload itself does.
+- The retry list (`bms3o_retry`) and the list of pending handovers (`bms3o_handover`) were changed by read-modify-write without a lock: when a request added an entry while the hourly cron worked off the list, one of the changes could be lost. Changes now run under a short lock (`bms3o_retry_lock`, `bms3o_handover_lock`, waits up to 5 seconds) and on the current list from the database; the cron applies its results after the uploads instead of writing back the list it read before.
+
 ## [1.0.10] – 2026-11-12
 
 ### Fixed

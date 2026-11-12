@@ -22,6 +22,7 @@ Platform and WooCommerce, MinIO as S3 server.
 | `13-elementor.php` | Elementor (skipped if inactive): background image in generated CSS from the bucket, CSS cache cleared after privacy change, settings save and "Leave the bucket" |
 | `14-enable-media-replace.php` | Enable Media Replace (skipped if inactive): same and new file name, with and without local copy – new files offloaded, old objects deleted, content URLs replaced and working |
 | `15-optimizers.php` | Files changed by an optimiser after the upload are uploaded again on metadata save; with EWWW: optimised files and WebP copies in the bucket |
+| `16-retry-lists.php` | Retry of a failed upload skips files another attachment with the same main file uploaded; entries added to the retry or handover list while the cron works it off are kept; changes wait for the list lock |
 
 ## Running locally
 
