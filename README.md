@@ -23,7 +23,7 @@ In November 2026 we analysed the free versions of seven popular offload plugins.
 | Offload Media – Cloud Storage 1.9.0 | paid | ✔ | – | AWS/GCS/DO/R2 (others paid) | – | AWS + GCS, 57 MB |
 | **BM S3 Offload** | ✔ browser, background, WP-CLI | ✔ | ✔ | ✔ | ✔ with BuddyBoss' access checks | none (< 400 KB in total) |
 
-Versions as analysed on 2026-11-11 from their source code; SDK sizes are the size of the bundled SDK on disk. Plans and features of other plugins change – check their current documentation.
+Versions as analysed on 2026-11-11 from their source code (ZIPs from wordpress.org); SDK sizes are the size of the bundled SDK directory on disk after unpacking (`du -sh` of the vendor/SDK folder). Plans and features of other plugins change – check their current documentation.
 
 BM S3 Offload is free without a Pro version, ships its own small S3 client instead of a vendor SDK, and integrates BuddyBoss' own access checks. Its core features are covered by end-to-end tests against WordPress, a real S3 server (MinIO), BuddyBoss Platform and WooCommerce; BuddyBoss' commercial document and video add-ons are not part of the tests.
 
@@ -190,7 +190,7 @@ output → wp_get_attachment_url / image_downsize / srcset / content filters
 ```
 
 - **S3 client**: `includes/S3/Client.php` – AWS Signature V4 on top of the WordPress HTTP API: PutObject, multipart upload, GetObject (streamed to disk), HeadObject, CopyObject (multipart copy above 5 GiB), DeleteObject(s), ListObjectsV2, pre-signed URLs. Network errors, throttling and 5xx responses are retried twice.
-- **Cleanup**: objects whose deletion failed (e.g. the previous public copy of a file made private) are retried by the hourly cron; objects that are referenced again are never deleted.
+- **Cleanup**: objects whose deletion failed (e.g. the previous public copy of a file made private) are retried by the hourly cron; objects that are referenced again are never deleted. The queue is protected against concurrent requests, failing entries move to the end, and entries only run on the storage they belong to. Queued deletions block a change of storage like offloaded files do.
 - **No lock-in**: content in the database keeps local URLs. Deactivating the plugin (after *Leave the bucket* if local copies were removed) restores the original behaviour.
 
 ### Hooks for developers
@@ -213,6 +213,7 @@ output → wp_get_attachment_url / image_downsize / srcset / content filters
 | `bms3o_bulk_batch_size` | filter | Items per batch of a bulk operation in the browser |
 | `bms3o_bulk_time_limit` | filter | Time budget of a browser bulk request in seconds (default 20, at most half of `max_execution_time`) |
 | `bms3o_uploaded` | action | After a file has been uploaded |
+| `bms3o_storage_changed` | action | After a confirmed change of storage (previous and new storage identity) |
 
 ## Development
 

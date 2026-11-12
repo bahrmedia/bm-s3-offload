@@ -255,6 +255,9 @@ final class Settings {
 		}
 		if ( '' === $recorded || $confirmed || ! self::has_items() ) {
 			update_option( self::STORAGE_OPTION, $new, true );
+			if ( '' !== $recorded ) {
+				self::storage_changed( $recorded, $new );
+			}
 			return '';
 		}
 		if ( $this->is_overridden( 'endpoint' ) ) {
@@ -282,12 +285,32 @@ final class Settings {
 	}
 
 	/**
-	 * Whether any file is recorded as offloaded.
+	 * Whether anything is bound to the current storage: offloaded files or
+	 * objects that still have to be deleted there.
 	 *
 	 * @return bool
 	 */
 	private static function has_items() {
-		return ( new Items() )->count() > 0;
+		wp_cache_delete( Offloader::ORPHANS_OPTION, 'options' );
+		$orphans = get_option( Offloader::ORPHANS_OPTION, array() );
+		return ! empty( $orphans ) || ( new Items() )->count() > 0;
+	}
+
+	/**
+	 * Announces a confirmed change of storage.
+	 *
+	 * @param string $from Previous storage identity.
+	 * @param string $to   New storage identity.
+	 * @return void
+	 */
+	private static function storage_changed( $from, $to ) {
+		/**
+		 * Fires after the storage has changed (confirmed, or nothing was bound to the old one).
+		 *
+		 * @param string $from Previous storage identity.
+		 * @param string $to   New storage identity.
+		 */
+		do_action( 'bms3o_storage_changed', $from, $to );
 	}
 
 	/**
@@ -332,7 +355,12 @@ final class Settings {
 	 * @return void
 	 */
 	public function confirm_storage() {
-		update_option( self::STORAGE_OPTION, self::storage_id( (string) $this->get( 'endpoint' ) ), true );
+		$from = (string) get_option( self::STORAGE_OPTION, '' );
+		$to   = self::storage_id( (string) $this->get( 'endpoint' ) );
+		update_option( self::STORAGE_OPTION, $to, true );
+		if ( '' !== $from && $from !== $to ) {
+			self::storage_changed( $from, $to );
+		}
 		$this->flush();
 	}
 

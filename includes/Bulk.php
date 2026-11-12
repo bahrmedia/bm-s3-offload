@@ -70,9 +70,11 @@ final class Bulk {
 	 * @param int    $cursor    Last processed ID (or offset for bb_sync).
 	 * @param int    $limit     Batch size.
 	 * @param array  $options   Options: 'remove_local' (bool) removes local copies after offloading, 'force' (bool) uploads unchanged files again.
+	 * @param float  $deadline  Optional microtime(true) after which no further item is started
+	 *                          (checked after every item; at least one item is processed).
 	 * @return array{cursor:int,processed:int,done:bool,errors:array<int,string>,total?:int}
 	 */
-	public function run( $operation, $cursor, $limit, array $options = array() ) {
+	public function run( $operation, $cursor, $limit, array $options = array(), $deadline = 0.0 ) {
 		$limit  = max( 1, (int) $limit );
 		$errors = array();
 
@@ -80,34 +82,46 @@ final class Bulk {
 			// Scan the file system once per run (first batch), then use the cached list.
 			$all  = $this->buddyboss ? $this->buddyboss->all_dirs( 0 === (int) $cursor ) : array();
 			$dirs = array_slice( $all, (int) $cursor, $limit );
+			$done = 0;
 			foreach ( $dirs as $dir ) {
 				$result = $this->buddyboss->sync_dir( $dir['dir'], $dir['type'], $dir['id'] );
 				if ( $result['errors'] ) {
 					/* translators: %s: directory */
 					$errors[ $dir['id'] ] = sprintf( __( 'Errors while synchronising %s', 'bm-s3-offload' ), $dir['dir'] );
 				}
+				++$done;
+				if ( $deadline > 0 && microtime( true ) >= $deadline ) {
+					break;
+				}
 			}
 			return array(
-				'cursor'    => (int) $cursor + count( $dirs ),
-				'processed' => count( $dirs ),
-				'done'      => (int) $cursor + count( $dirs ) >= count( $all ),
+				'cursor'    => (int) $cursor + $done,
+				'processed' => $done,
+				'done'      => (int) $cursor + $done >= count( $all ),
 				'errors'    => $errors,
 				'total'     => count( $all ),
 			);
 		}
 
-		$ids = $this->ids( $operation, (int) $cursor, $limit );
+		$ids  = $this->ids( $operation, (int) $cursor, $limit );
+		$last = (int) $cursor;
+		$done = 0;
 		foreach ( $ids as $id ) {
 			$message = $this->process( $operation, $id, $options );
 			if ( '' !== $message ) {
 				$errors[ $id ] = $message;
 			}
+			$last = (int) $id;
+			++$done;
+			if ( $deadline > 0 && microtime( true ) >= $deadline ) {
+				break;
+			}
 		}
 
 		return array(
-			'cursor'    => empty( $ids ) ? (int) $cursor : (int) end( $ids ),
-			'processed' => count( $ids ),
-			'done'      => count( $ids ) < $limit,
+			'cursor'    => $last,
+			'processed' => $done,
+			'done'      => $done === count( $ids ) && count( $ids ) < $limit,
 			'errors'    => $errors,
 		);
 	}

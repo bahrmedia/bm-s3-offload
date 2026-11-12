@@ -99,6 +99,7 @@ final class Plugin {
 		$this->offloader   = new Offloader( $this->settings, new Items() );
 		$this->attachments = new Attachments( $this->offloader );
 		add_action( self::CRON_HOOK, array( $this->offloader, 'process_orphans' ), 10, 0 );
+		add_action( 'bms3o_storage_changed', array( $this->offloader, 'move_orphans' ), 10, 2 );
 		$this->attachments->register();
 		( new ContentRewriter( $this->offloader ) )->register();
 		( new Assets( $this->settings ) )->register();

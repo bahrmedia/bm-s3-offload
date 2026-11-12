@@ -29,6 +29,16 @@ final class Offloader {
 	const ORPHANS_MAX = 5000;
 
 	/**
+	 * Lock that serialises changes of the orphan queue (option name).
+	 */
+	const ORPHANS_LOCK = 'bms3o_orphans_lock';
+
+	/**
+	 * Orphans that failed this often are reported as failing repeatedly.
+	 */
+	const ORPHANS_FAILING = 3;
+
+	/**
 	 * Settings.
 	 *
 	 * @var Settings
@@ -312,8 +322,10 @@ final class Offloader {
 			// The key moved within the bucket (e.g. privacy changed): remove the old object once
 			// the item points to the new one, but only if it belongs to this site's key space (never another
 			// site's object). Failed deletions are retried by the hourly cron.
-			if ( $item && $item['bucket'] === $bucket && $item['object_key'] !== $key && $this->owns_key( $item['object_key'] ) ) {
-				$this->delete_or_queue( $item['bucket'], $item['object_key'], $path );
+			if ( $item && $item['bucket'] === $bucket && $item['object_key'] !== $key && $this->owns_key( $item['object_key'] )
+				&& ! $this->delete_or_queue( $item['bucket'], $item['object_key'], $path ) && $is_private && ! $item['is_private'] ) {
+				// A leftover public copy of a file that became private stays readable: report it.
+				$result['errors'][ $path ] = __( 'The previous copy could not be deleted yet. It stays reachable until the hourly cleanup has removed it.', 'bm-s3-offload' );
 			}
 
 			$result['uploaded'][] = $path;
@@ -647,7 +659,9 @@ final class Offloader {
 	 * @return void
 	 */
 	public function queue_orphans( array $objects ) {
-		$orphans = $this->orphans();
+		$storage = $this->current_storage();
+		$locked  = $this->lock_orphans();
+		$orphans = $this->orphans( true );
 		foreach ( $objects as $object ) {
 			$id = md5( $object[0] . '|' . $object[1] );
 			if ( ! isset( $orphans[ $id ] ) && count( $orphans ) >= self::ORPHANS_MAX ) {
@@ -657,18 +671,105 @@ final class Offloader {
 				'bucket'   => (string) $object[0],
 				'key'      => (string) $object[1],
 				'path'     => (string) $object[2],
+				'storage'  => $storage,
 				'attempts' => isset( $orphans[ $id ] ) ? (int) $orphans[ $id ]['attempts'] : 0,
 			);
 		}
 		update_option( self::ORPHANS_OPTION, $orphans, false );
+		if ( $locked ) {
+			$this->unlock_orphans();
+		}
 	}
 
 	/**
-	 * Objects waiting for deletion.
+	 * Moves queued orphans to another storage after a confirmed change of
+	 * storage (the objects were copied there, leftovers included).
 	 *
-	 * @return array<string,array{bucket:string,key:string,path:string,attempts:int}>
+	 * @param string $from Previous storage identity.
+	 * @param string $to   New storage identity.
+	 * @return void
 	 */
-	public function orphans() {
+	public function move_orphans( $from, $to ) {
+		$locked  = $this->lock_orphans();
+		$orphans = $this->orphans( true );
+		foreach ( $orphans as $id => $orphan ) {
+			if ( empty( $orphan['storage'] ) || $orphan['storage'] === $from ) {
+				$orphans[ $id ]['storage'] = (string) $to;
+			}
+		}
+		update_option( self::ORPHANS_OPTION, $orphans, false );
+		if ( $locked ) {
+			$this->unlock_orphans();
+		}
+	}
+
+	/**
+	 * Number of orphans whose deletion failed repeatedly.
+	 *
+	 * @return int
+	 */
+	public function failing_orphans() {
+		$failing = 0;
+		foreach ( $this->orphans() as $orphan ) {
+			if ( (int) $orphan['attempts'] >= self::ORPHANS_FAILING ) {
+				++$failing;
+			}
+		}
+		return $failing;
+	}
+
+	/**
+	 * Storage identity of the configured endpoint.
+	 *
+	 * @return string
+	 */
+	private function current_storage() {
+		return Settings::storage_id( (string) $this->settings->get( 'endpoint' ) );
+	}
+
+	/**
+	 * Acquires the orphan queue lock (atomic INSERT IGNORE; add_option() is a
+	 * check-then-upsert and not atomic). A lock older than 30 seconds belongs
+	 * to a request that died and is taken over. Waits up to 5 seconds.
+	 *
+	 * @return bool Whether the lock was acquired. Callers continue without it
+	 *              rather than losing queue entries.
+	 */
+	private function lock_orphans() {
+		global $wpdb;
+		// phpcs:disable WordPress.DB.DirectDatabaseQuery
+		for ( $i = 0; $i < 50; $i++ ) {
+			$now = time();
+			$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s AND CAST(option_value AS UNSIGNED) < %d", self::ORPHANS_LOCK, $now - 30 ) );
+			if ( 1 === (int) $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", self::ORPHANS_LOCK, (string) $now ) ) ) {
+				return true;
+			}
+			usleep( 100000 );
+		}
+		// phpcs:enable
+		return false;
+	}
+
+	/**
+	 * Releases the orphan queue lock.
+	 *
+	 * @return void
+	 */
+	private function unlock_orphans() {
+		global $wpdb;
+		$wpdb->delete( $wpdb->options, array( 'option_name' => self::ORPHANS_LOCK ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	}
+
+	/**
+	 * Objects waiting for deletion, in processing order.
+	 *
+	 * @param bool $fresh Read from the database (bypass the object cache).
+	 * @return array<string,array{bucket:string,key:string,path:string,storage?:string,attempts:int}>
+	 */
+	public function orphans( $fresh = false ) {
+		if ( $fresh ) {
+			wp_cache_delete( self::ORPHANS_OPTION, 'options' );
+		}
 		$orphans = get_option( self::ORPHANS_OPTION, array() );
 		return is_array( $orphans ) ? $orphans : array();
 	}
@@ -681,19 +782,31 @@ final class Offloader {
 	 * @return int Number of objects still waiting.
 	 */
 	public function process_orphans( $limit = 200 ) {
-		$orphans = $this->orphans();
+		$orphans = $this->orphans( true );
 		if ( empty( $orphans ) || '' !== $this->settings->storage_error() || ! $this->settings->is_configured() ) {
 			return count( $orphans );
 		}
 
-		$batch = array_slice( $orphans, 0, max( 1, (int) $limit ), true );
+		// Only objects of the configured storage (entries of 1.0.1/1.0.2 carry no storage).
+		$storage = $this->current_storage();
+		$batch   = array();
+		foreach ( $orphans as $id => $orphan ) {
+			if ( empty( $orphan['storage'] ) || $orphan['storage'] === $storage ) {
+				$batch[ $id ] = $orphan;
+				if ( count( $batch ) >= max( 1, (int) $limit ) ) {
+					break;
+				}
+			}
+		}
 		$items = $this->items->get_many( array_column( $batch, 'path' ) );
 
+		$done      = array();
+		$failed    = array();
 		$by_bucket = array();
 		foreach ( $batch as $id => $orphan ) {
 			$item = isset( $items[ $orphan['path'] ] ) ? $items[ $orphan['path'] ] : null;
 			if ( $item && $item['bucket'] === $orphan['bucket'] && $item['object_key'] === $orphan['key'] ) {
-				unset( $orphans[ $id ] ); // Referenced again.
+				$done[] = $id; // Referenced again: never delete.
 				continue;
 			}
 			$by_bucket[ $orphan['bucket'] ][ $orphan['key'] ] = $id;
@@ -701,20 +814,38 @@ final class Offloader {
 
 		foreach ( $by_bucket as $bucket => $keys ) {
 			try {
-				$failed = $this->settings->client( (string) $bucket )->delete_many( array_keys( $keys ) );
+				$errors = $this->settings->client( (string) $bucket )->delete_many( array_keys( $keys ) );
 			} catch ( \Exception $e ) {
-				$failed = array_fill_keys( array_keys( $keys ), $e->getMessage() );
+				$errors = array_fill_keys( array_keys( $keys ), $e->getMessage() );
 			}
 			foreach ( $keys as $key => $id ) {
-				if ( isset( $failed[ $key ] ) ) {
-					++$orphans[ $id ]['attempts'];
+				if ( isset( $errors[ $key ] ) ) {
+					$failed[] = $id;
 				} else {
-					unset( $orphans[ $id ] );
+					$done[] = $id;
 				}
 			}
 		}
 
+		// Apply the results to the current queue: entries added meanwhile are kept, failed
+		// entries move to the end so that they never block the others.
+		$locked  = $this->lock_orphans();
+		$orphans = $this->orphans( true );
+		foreach ( $done as $id ) {
+			unset( $orphans[ $id ] );
+		}
+		foreach ( $failed as $id ) {
+			if ( isset( $orphans[ $id ] ) ) {
+				$entry = $orphans[ $id ];
+				unset( $orphans[ $id ] );
+				++$entry['attempts'];
+				$orphans[ $id ] = $entry;
+			}
+		}
 		update_option( self::ORPHANS_OPTION, $orphans, false );
+		if ( $locked ) {
+			$this->unlock_orphans();
+		}
 		return count( $orphans );
 	}
 

@@ -157,7 +157,7 @@ $slow = static function ( $path, $key, $source_type, $source_id ) use ( $budget_
 	}
 };
 add_action( 'bms3o_uploaded', $slow, 10, 4 );
-$result = $page->run_bulk( 'offload', $start, array(), 1, 1 );
+$result = $page->run_bulk( 'offload', $start, array(), 10, 1 ); // The budget is checked after every item, not per batch of 10.
 remove_action( 'bms3o_uploaded', $slow, 10 );
 bms3o_t( 1 === $result['processed'] && ! $result['done'] && $result['cursor'] === $budget_ids[0], 'The request ends after the budget, the next one continues at the cursor', $result );
 

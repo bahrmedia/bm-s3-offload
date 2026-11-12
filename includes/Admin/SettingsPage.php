@@ -471,6 +471,7 @@ final class SettingsPage {
 				<tr><th><?php esc_html_e( 'Without local copy', 'bm-s3-offload' ); ?></th><td><?php echo esc_html( number_format_i18n( $stats['local_removed'] ) ); ?></td></tr>
 				<tr><th><?php esc_html_e( 'Private files', 'bm-s3-offload' ); ?></th><td><?php echo esc_html( number_format_i18n( $stats['private'] ) ); ?></td></tr>
 				<tr><th><?php esc_html_e( 'Waiting for retry', 'bm-s3-offload' ); ?></th><td><?php echo esc_html( number_format_i18n( $retries ) ); ?></td></tr>
+				<tr><th><?php esc_html_e( 'Waiting for cleanup', 'bm-s3-offload' ); ?></th><td><?php echo esc_html( number_format_i18n( count( $this->plugin->offloader->orphans() ) ) ); ?></td></tr>
 			</tbody>
 		</table>
 
@@ -635,8 +636,9 @@ final class SettingsPage {
 	}
 
 	/**
-	 * Processes batches of a bulk operation until it is done or the time
-	 * budget is used up (at least one batch).
+	 * Processes a bulk operation until it is done or the time budget is used
+	 * up. The budget is checked after every item (at least one item is
+	 * processed); a single large file can still exceed it.
 	 *
 	 * @param string $operation Operation.
 	 * @param int    $cursor    Cursor.
@@ -655,7 +657,7 @@ final class SettingsPage {
 		);
 
 		do {
-			$batch = $this->plugin->bulk->run( $operation, $result['cursor'], $size, $options );
+			$batch = $this->plugin->bulk->run( $operation, $result['cursor'], $size, $options, $deadline );
 			$this->plugin->offloader->process_removal_queue();
 
 			$result['cursor']     = $batch['cursor'];
@@ -767,6 +769,22 @@ final class SettingsPage {
 			} else {
 				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__( 'Settings saved.', 'bm-s3-offload' ) . '</p></div>';
 			}
+		}
+
+		$failing = $ours ? $this->plugin->offloader->failing_orphans() : 0;
+		if ( $failing > 0 ) {
+			echo '<div class="notice notice-warning"><p>' . esc_html(
+				sprintf(
+					/* translators: %d: number of objects */
+					_n(
+						'%d object could not be deleted from the bucket after several attempts (e.g. missing delete permission). It is retried hourly; until then it stays in the bucket and, if it is a previous public copy, reachable.',
+						'%d objects could not be deleted from the bucket after several attempts (e.g. missing delete permission). They are retried hourly; until then they stay in the bucket and, if they are previous public copies, reachable.',
+						$failing,
+						'bm-s3-offload'
+					),
+					$failing
+				)
+			) . '</p></div>';
 		}
 
 		$storage_error = $this->plugin->settings->storage_error();

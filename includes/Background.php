@@ -196,7 +196,7 @@ final class Background {
 		$current  = true;
 
 		do {
-			$batch = $this->bulk->run( $state['operation'], $state['cursor'], 10, $state['options'] );
+			$batch = $this->bulk->run( $state['operation'], $state['cursor'], 10, $state['options'], (float) $deadline );
 			$this->offloader->process_removal_queue();
 
 			$state['cursor']     = $batch['cursor'];

@@ -2,6 +2,21 @@
 
 All notable changes to this project are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.0.3] – 2026-11-12
+
+### Fixed
+
+- Cleanup queue: entries added by another request while the hourly cleanup was running were lost. Queue changes are now serialised with an atomic lock and the cleanup only changes the entries it processed.
+- Queued deletions did not block a change of storage, and the cleanup ran them against the new storage. They now block an unconfirmed change, carry the storage they belong to and only run there; a confirmed change takes them along.
+- A re-upload that made a file private reported success although the previous public copy could not be deleted yet; it is now reported like a privacy change.
+- Entries that failed permanently blocked the following ones (always the first 200 were tried). Failed entries now move to the end of the queue.
+
+### Changed
+
+- Objects that could not be deleted after several attempts are shown as a notice; the tools tab and `wp bm-s3 status` show the cleanup queue.
+- The time budget of bulk operations (browser and background) is checked after every item instead of after every batch of 10.
+- README: method of the SDK size measurement.
+
 ## [1.0.2] – 2026-11-12
 
 ### Added
