@@ -23,6 +23,12 @@ final class Attachments {
 	const RETRY_OPTION = 'bms3o_retry';
 
 	/**
+	 * Option: shared files whose items could not be handed over to the
+	 * remaining attachment (path => main file), retried hourly.
+	 */
+	const HANDOVER_OPTION = 'bms3o_handover';
+
+	/**
 	 * Cron hook that offloads large attachments after the upload request.
 	 */
 	const ASYNC_HOOK = 'bms3o_offload_attachment';
@@ -115,6 +121,7 @@ final class Attachments {
 
 		// Retries and background offloads.
 		add_action( 'bms3o_cron', array( $this, 'retry_failed' ) );
+		add_action( 'bms3o_cron', array( $this, 'retry_handovers' ) );
 		add_action( self::ASYNC_HOOK, array( $this, 'offload_in_background' ) );
 	}
 
@@ -387,22 +394,40 @@ final class Attachments {
 			return array( $file => __( 'Files in protected directories (BuddyBoss, WooCommerce, Easy Digital Downloads) cannot be made public.', 'bm-s3-offload' ) );
 		}
 
-		$paths  = array_keys( $this->offloader->items()->get_by_source( Items::SOURCE_POST, (int) $attachment_id ) );
-		$errors = $this->offloader->set_privacy( $paths, (bool) $is_private );
+		// Attachments that share the file (media translations) share its privacy: the
+		// objects belong to one of them, the state is stored for all of them.
+		$group  = array_merge( array( (int) $attachment_id ), $this->sharing_attachments( (int) $attachment_id ) );
+		$errors = $this->offloader->set_privacy( array_keys( $this->group_items( $group ) ), (bool) $is_private );
 
 		// Store the new state once every object has been moved (a leftover previous copy is
 		// reported, but cleaned up later); otherwise the next offload moves files back to the
 		// stored state.
 		$moved = true;
-		foreach ( $this->offloader->items()->get_by_source( Items::SOURCE_POST, (int) $attachment_id ) as $item ) {
+		foreach ( $this->group_items( $group ) as $item ) {
 			if ( (bool) $item['is_private'] !== (bool) $is_private ) {
 				$moved = false;
 			}
 		}
 		if ( $moved ) {
-			update_post_meta( $attachment_id, self::META_PRIVATE, $is_private ? '1' : '0' );
+			foreach ( $group as $id ) {
+				update_post_meta( $id, self::META_PRIVATE, $is_private ? '1' : '0' );
+			}
 		}
 		return $errors;
+	}
+
+	/**
+	 * Items of a group of attachments.
+	 *
+	 * @param int[] $attachment_ids Attachment IDs.
+	 * @return array<string,array> Items by path.
+	 */
+	private function group_items( array $attachment_ids ) {
+		$items = array();
+		foreach ( $attachment_ids as $id ) {
+			$items += $this->offloader->items()->get_by_source( Items::SOURCE_POST, (int) $id );
+		}
+		return $items;
 	}
 
 	/**
@@ -474,14 +499,17 @@ final class Attachments {
 	 */
 	private function own_paths( $attachment_id, array $paths ) {
 		$sharing = null;
+		$pending = null;
 		foreach ( $this->offloader->items()->get_many( $paths ) as $path => $item ) {
 			if ( Items::SOURCE_POST !== $item['source_type'] || (int) $attachment_id === (int) $item['source_id'] ) {
 				continue;
 			}
 			if ( null === $sharing ) {
 				$sharing = $this->sharing_attachments( $attachment_id );
+				$pending = get_option( self::HANDOVER_OPTION, array() );
 			}
-			if ( in_array( (int) $item['source_id'], $sharing, true ) ) {
+			// Also files whose handover from a deleted attachment is still pending.
+			if ( in_array( (int) $item['source_id'], $sharing, true ) || ( is_array( $pending ) && isset( $pending[ $path ] ) ) ) {
 				$paths = array_diff( $paths, array( $path ) );
 			}
 		}
@@ -654,35 +682,74 @@ final class Attachments {
 	 * @return void
 	 */
 	public function on_delete( $attachment_id ) {
-		$this->clear_retry( (int) $attachment_id );
-		$items = $this->offloader->items()->get_by_source( Items::SOURCE_POST, (int) $attachment_id );
+		$attachment_id = (int) $attachment_id;
+		$this->clear_retry( $attachment_id );
+		$items = $this->offloader->items()->get_by_source( Items::SOURCE_POST, $attachment_id );
 		if ( empty( $items ) ) {
 			return;
 		}
 
 		// Files that another attachment still uses (e.g. a media translation of WPML or
-		// Polylang) are kept: their items are handed over to that attachment.
+		// Polylang) are kept: their items are handed over to that attachment. They are
+		// never deleted, even when the handover fails – it is then retried hourly.
 		$paths = array_keys( $items );
-		foreach ( $this->sharing_attachments( (int) $attachment_id ) as $other ) {
-			$shared = array_intersect( $paths, $this->paths( $other ) );
-			foreach ( $paths as $path ) {
-				// WebP/AVIF copies of shared files are shared as well (paths() lists them only for their owner).
-				if ( preg_match( '/^(.+)\.(webp|avif)$/', $path, $m ) && in_array( $m[1], $shared, true ) ) {
-					$shared[] = $path;
-				}
+		$file  = (string) get_post_meta( $attachment_id, '_wp_attached_file', true );
+		foreach ( $this->sharing_attachments( $attachment_id ) as $other ) {
+			$shared = $this->shared_paths( $paths, $other );
+			if ( empty( $shared ) ) {
+				continue;
 			}
-			$shared = array_values( array_unique( $shared ) );
-			if ( ! empty( $shared ) && $this->offloader->items()->reassign( $shared, Items::SOURCE_POST, $other ) ) {
-				$paths = array_values( array_diff( $paths, $shared ) );
-			}
+			$paths = array_values( array_diff( $paths, $shared ) );
+			$this->add_handover( $this->offloader->items()->reassign( $shared, Items::SOURCE_POST, $other ), $file );
+			$this->adopt_privacy( $other, $items[ $shared[0] ] );
 			if ( empty( $paths ) ) {
-				break;
+				return;
 			}
-		}
-		if ( empty( $paths ) ) {
-			return;
 		}
 
+		$this->forget_files( $paths, $items );
+	}
+
+	/**
+	 * Paths of an attachment that another attachment uses as well.
+	 *
+	 * @param string[] $paths Paths of the attachment.
+	 * @param int      $other Other attachment.
+	 * @return string[]
+	 */
+	private function shared_paths( array $paths, $other ) {
+		$shared = array_intersect( $paths, $this->paths( $other ) );
+		foreach ( $paths as $path ) {
+			// WebP/AVIF copies of shared files are shared as well (paths() lists them only for their owner).
+			if ( preg_match( '/^(.+)\.(webp|avif)$/', $path, $m ) && in_array( $m[1], $shared, true ) ) {
+				$shared[] = $path;
+			}
+		}
+		return array_values( array_unique( $shared ) );
+	}
+
+	/**
+	 * Stores the privacy of handed-over objects for the attachment that owns
+	 * them now, so that later privacy syncs do not move them.
+	 *
+	 * @param int   $attachment_id New owner.
+	 * @param array $item          One of the handed-over items.
+	 * @return void
+	 */
+	private function adopt_privacy( $attachment_id, array $item ) {
+		if ( $this->is_private( $attachment_id ) !== (bool) $item['is_private'] ) {
+			update_post_meta( $attachment_id, self::META_PRIVATE, $item['is_private'] ? '1' : '0' );
+		}
+	}
+
+	/**
+	 * Deletes the objects (if set) and items of files nobody uses any more.
+	 *
+	 * @param string[]            $paths Relative paths.
+	 * @param array<string,array> $items Items by path.
+	 * @return void
+	 */
+	private function forget_files( array $paths, array $items ) {
 		$this->offloader->unqueue_local_removal( $paths );
 
 		if ( $this->offloader->settings()->get( 'delete_remote' ) && $this->offloader->settings()->is_configured() ) {
@@ -707,13 +774,23 @@ final class Attachments {
 	 * @return int[] Attachment IDs, oldest first.
 	 */
 	public function sharing_attachments( $attachment_id ) {
+		return $this->attachments_with_file( (string) get_post_meta( (int) $attachment_id, '_wp_attached_file', true ), (int) $attachment_id );
+	}
+
+	/**
+	 * Attachments whose main file is the given file.
+	 *
+	 * @param string $file    Relative path of the main file.
+	 * @param int    $exclude Attachment ID to leave out.
+	 * @return int[] Attachment IDs, oldest first.
+	 */
+	private function attachments_with_file( $file, $exclude = 0 ) {
 		global $wpdb;
-		$file = (string) get_post_meta( (int) $attachment_id, '_wp_attached_file', true );
-		if ( '' === $file ) {
+		if ( '' === (string) $file ) {
 			return array();
 		}
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
-		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attached_file' AND meta_value = %s AND post_id <> %d ORDER BY post_id ASC", $file, (int) $attachment_id ) );
+		$ids = $wpdb->get_col( $wpdb->prepare( "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = '_wp_attached_file' AND meta_value = %s AND post_id <> %d ORDER BY post_id ASC", (string) $file, (int) $exclude ) );
 		return array_map( 'intval', (array) $ids );
 	}
 
@@ -1087,5 +1164,82 @@ final class Attachments {
 	public function pending_retries() {
 		$retry = get_option( self::RETRY_OPTION, array() );
 		return is_array( $retry ) ? array_map( 'intval', array_keys( $retry ) ) : array();
+	}
+
+	/**
+	 * Remembers shared files whose items could not be handed over. Until the
+	 * handover succeeds, their items keep pointing to the deleted attachment;
+	 * objects and items are kept.
+	 *
+	 * @param string[] $paths Relative paths.
+	 * @param string   $file  Main file of the attachments sharing them.
+	 * @return void
+	 */
+	private function add_handover( array $paths, $file ) {
+		if ( empty( $paths ) ) {
+			return;
+		}
+		$pending = get_option( self::HANDOVER_OPTION, array() );
+		$pending = is_array( $pending ) ? $pending : array();
+		foreach ( $paths as $path ) {
+			if ( count( $pending ) >= 5000 ) {
+				break; // The files are kept anyway; they are only not reassigned.
+			}
+			$pending[ $path ] = (string) $file;
+		}
+		update_option( self::HANDOVER_OPTION, $pending, false );
+	}
+
+	/**
+	 * Cron: hands over shared files whose handover failed to an attachment
+	 * that still uses them – or, when none is left, deletes them like the
+	 * deletion of the attachment would have.
+	 *
+	 * @return void
+	 */
+	public function retry_handovers() {
+		$pending = get_option( self::HANDOVER_OPTION, array() );
+		if ( ! is_array( $pending ) || empty( $pending ) ) {
+			return;
+		}
+
+		$groups = array();
+		$batch  = array_slice( $pending, 0, 500, true );
+		$this->offloader->items()->forget( array_keys( $batch ) );
+		$items = $this->offloader->items()->get_many( array_keys( $batch ) );
+		foreach ( $batch as $path => $file ) {
+			$item = isset( $items[ $path ] ) ? $items[ $path ] : null;
+			if ( ! $item || Items::SOURCE_POST !== $item['source_type'] || get_post( (int) $item['source_id'] ) ) {
+				unset( $pending[ $path ] ); // Gone or owned by an existing attachment already.
+				continue;
+			}
+			$groups[ $file ][] = $path;
+		}
+
+		foreach ( $groups as $file => $paths ) {
+			$owners = $this->attachments_with_file( (string) $file );
+			if ( empty( $owners ) ) {
+				$this->forget_files( $paths, $items );
+				$failed = array();
+			} else {
+				$failed = $this->offloader->items()->reassign( $paths, Items::SOURCE_POST, $owners[0] );
+				$this->adopt_privacy( $owners[0], $items[ $paths[0] ] );
+			}
+			foreach ( array_diff( $paths, $failed ) as $path ) {
+				unset( $pending[ $path ] );
+			}
+		}
+
+		update_option( self::HANDOVER_OPTION, $pending, false );
+	}
+
+	/**
+	 * Number of shared files waiting for their handover.
+	 *
+	 * @return int
+	 */
+	public function pending_handovers() {
+		$pending = get_option( self::HANDOVER_OPTION, array() );
+		return is_array( $pending ) ? count( $pending ) : 0;
 	}
 }

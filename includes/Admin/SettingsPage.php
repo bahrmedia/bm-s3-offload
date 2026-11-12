@@ -468,7 +468,7 @@ final class SettingsPage {
 				return $items->stats();
 			}
 		);
-		$retries  = count( $this->plugin->attachments->pending_retries() );
+		$retries  = count( $this->plugin->attachments->pending_retries() ) + $this->plugin->attachments->pending_handovers();
 		?>
 		<h2><?php esc_html_e( 'Status', 'bm-s3-offload' ); ?></h2>
 		<table class="widefat striped bms3o-stats">

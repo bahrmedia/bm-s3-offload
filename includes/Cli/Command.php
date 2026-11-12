@@ -54,21 +54,22 @@ final class Command {
 		$stats    = $this->plugin->offloader->items()->stats();
 
 		$values = array(
-			'configured'      => $settings->is_configured() ? 'yes' : 'no',
-			'endpoint'        => $settings->get( 'endpoint' ),
-			'bucket'          => $settings->get( 'bucket' ),
-			'region'          => $settings->get( 'region' ),
-			'remove_local'    => $settings->get( 'remove_local' ) ? 'yes' : 'no',
-			'buddyboss'       => $this->plugin->buddyboss ? 'active' : 'inactive',
-			'files'           => $stats['files'],
-			'bytes'           => size_format( $stats['bytes'], 1 ),
-			'local_removed'   => $stats['local_removed'],
-			'private'         => $stats['private'],
-			'pending_offload' => $this->plugin->bulk->remaining( 'offload' ),
-			'pending_retries' => count( $this->plugin->attachments->pending_retries() ),
-			'pending_cleanup' => $this->plugin->offloader->orphan_store()->count(),
-			'failing_cleanup' => $this->plugin->offloader->failing_orphans(),
-			'storage'         => '' === $settings->storage_error() ? 'ok' : 'changed – see "wp bm-s3 storage"',
+			'configured'       => $settings->is_configured() ? 'yes' : 'no',
+			'endpoint'         => $settings->get( 'endpoint' ),
+			'bucket'           => $settings->get( 'bucket' ),
+			'region'           => $settings->get( 'region' ),
+			'remove_local'     => $settings->get( 'remove_local' ) ? 'yes' : 'no',
+			'buddyboss'        => $this->plugin->buddyboss ? 'active' : 'inactive',
+			'files'            => $stats['files'],
+			'bytes'            => size_format( $stats['bytes'], 1 ),
+			'local_removed'    => $stats['local_removed'],
+			'private'          => $stats['private'],
+			'pending_offload'  => $this->plugin->bulk->remaining( 'offload' ),
+			'pending_retries'  => count( $this->plugin->attachments->pending_retries() ),
+			'pending_handover' => $this->plugin->attachments->pending_handovers(),
+			'pending_cleanup'  => $this->plugin->offloader->orphan_store()->count(),
+			'failing_cleanup'  => $this->plugin->offloader->failing_orphans(),
+			'storage'          => '' === $settings->storage_error() ? 'ok' : 'changed – see "wp bm-s3 storage"',
 		);
 
 		$rows = array();

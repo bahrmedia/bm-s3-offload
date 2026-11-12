@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.0.10] – 2026-11-12
+
+### Fixed
+
+- Attachments that share a file (media translations): when the items of the shared files could not be handed over to the remaining attachment (database error), the objects were deleted anyway – without local copies the translation lost its file. Shared files are now never deleted when one of the attachments is deleted. A failed handover is retried by the hourly cron (`bms3o_handover`, shown as *Waiting for retry* and as `pending_handover` in `wp bm-s3 status`); if no attachment uses the files by then, they are deleted as usual. `Items::reassign()` now returns the paths that could not be updated.
+- *Make private* / *Make public* on a translation of an attachment reported success but changed nothing: the objects belong to the attachment that uploaded the file, so no files were found. Privacy now applies to all attachments sharing the file – the objects are moved and the state is stored for each of them. When the items are handed over, the remaining attachment takes over their privacy, so a later privacy sync does not move them back.
+
+### Documentation
+
+- WPML is not tested (only Polylang); it uses the same mechanism (several attachments with the same file).
+- Private images as Elementor backgrounds: Elementor caches its CSS, while signed URLs expire – such backgrounds stop working after the signed URL lifetime.
+
 ## [1.0.9] – 2026-11-12
 
 ### Fixed

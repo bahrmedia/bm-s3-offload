@@ -3,7 +3,7 @@
  * Plugin Name:       BM S3 Offload
  * Plugin URI:        https://github.com/bahrmedia/bm-s3-offload
  * Description:       Offloads the media library to any S3-compatible object storage (AWS S3, Cloudflare R2, Wasabi, Backblaze B2, DigitalOcean Spaces, Hetzner, IONOS, MinIO …) with first-class BuddyBoss support. Free, open source, no Pro version, no SDK.
- * Version:           1.0.9
+ * Version:           1.0.10
  * Requires at least: 6.2
  * Requires PHP:      7.4
  * Author:            Bahr Media
@@ -18,7 +18,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'BMS3O_VERSION', '1.0.9' );
+define( 'BMS3O_VERSION', '1.0.10' );
 define( 'BMS3O_FILE', __FILE__ );
 define( 'BMS3O_DIR', plugin_dir_path( __FILE__ ) );
 define( 'BMS3O_URL', plugin_dir_url( __FILE__ ) );

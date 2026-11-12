@@ -43,7 +43,7 @@ BM S3 Offload is free without a Pro version, ships its own small S3 client inste
 - **WooCommerce**: downloadable products are delivered from the bucket. WooCommerce checks the order, then the customer is redirected to a short-lived signed URL – downloads never pass through your server.
 - **CDN for scripts and styles**: rewrite theme, plugin and core assets to a pull CDN (front end only).
 - **WebP/AVIF copies** created by image optimisers (`photo.jpg.webp`, EWWW, WebP Express) are offloaded, rewritten and removed together with the image.
-- **Page builders**: Elementor output is rewritten like post content; background images in Elementor's generated CSS use bucket URLs, and its CSS cache is cleared when URLs change (privacy change, *Leave the bucket*, settings).
+- **Page builders**: Elementor output is rewritten like post content; background images in Elementor's generated CSS use bucket URLs, and its CSS cache is cleared when URLs change (privacy change, *Leave the bucket*, settings). Do not use *private* images as Elementor backgrounds: the cached CSS keeps signed URLs, which expire after `signed_ttl`.
 - **Verify** (`wp bm-s3 verify --fix`): checks that every offloaded file exists in the bucket and repairs missing objects from local copies.
 - **Leave the bucket**: move everything back to the server with one click.
 - **Media library**: status column, filter by storage state, row actions and bulk actions (offload, remove local copy, restore, make private/public, remove from bucket).
@@ -79,8 +79,8 @@ The integration tests run with these free plugins active (GitHub Actions):
 
 | Plugin | What is covered |
 |---|---|
-| **Polylang** (media translation), **WPML** (same mechanism) | Translations of an attachment share its file: the file is uploaded once, deleting one language version keeps the objects for the others, *Remove local copies* works although Polylang blocks `wp_delete_file()` for shared files. |
-| **Elementor** | Background images in generated CSS are delivered from the bucket; the CSS cache is cleared when URLs change. |
+| **Polylang** (media translation) | Translations of an attachment share its file: the file is uploaded once, deleting one language version keeps the objects for the others (also when handing them over fails – it is retried hourly), *Make private/public* applies to all language versions, *Remove local copies* works although Polylang blocks `wp_delete_file()` for shared files. WPML uses the same mechanism (several attachments with the same file) but is not tested. |
+| **Elementor** | Background images in generated CSS are delivered from the bucket; the CSS cache is cleared when URLs change. Not covered: private images as backgrounds (signed URLs in cached CSS expire). |
 | **Enable Media Replace** | Replacing with the same or a new file name, with or without local copy: new files are offloaded, objects of old files deleted, URLs in content replaced. |
 | **EWWW Image Optimizer** | Optimised files and WebP copies end up in the bucket; files an optimiser changes later are uploaded again when it saves the metadata. |
 | **BuddyBoss Platform**, **WooCommerce** | See above. |
@@ -259,5 +259,5 @@ GPL-2.0-or-later. © Bahr Media. See [LICENSE](LICENSE).
 - Auslieferung über Bucket, CDN oder signierte URLs; Inhalte in der Datenbank bleiben unverändert (kein Lock-in)
 - **BuddyBoss**: Fotos, Dokumente und Videos werden privat gespeichert und nur nach der Zugriffsprüfung von BuddyBoss ausgeliefert (öffentlich, Freunde, nur ich, Gruppen, Nachrichten, Foren). Profil-, Gruppen- und Titelbilder werden gespiegelt.
 - Alle Einstellungen auch per `wp-config.php` (`BMS3O_*`), Zugangsdaten in der Datenbank verschlüsselt
-- Getestet mit Polylang (Medienübersetzung; WPML funktioniert gleich), Elementor, Enable Media Replace und EWWW Image Optimizer; Dateien von Formular-Plugins bleiben auf dem Server
+- Getestet mit Polylang (Medienübersetzung; WPML nutzt denselben Mechanismus, ist aber ungetestet), Elementor, Enable Media Replace und EWWW Image Optimizer; Dateien von Formular-Plugins bleiben auf dem Server
 - Oberfläche auf Deutsch und Englisch
