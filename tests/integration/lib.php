@@ -117,6 +117,7 @@ function bms3o_t_image( $width = 800, $height = 600, $name = 'test.png' ) {
 	$dir  = trailingslashit( get_temp_dir() ) . 'bms3o-test-' . wp_generate_password( 6, false );
 	$file = $dir . '/' . $name;
 	wp_mkdir_p( $dir );
+
 	$GLOBALS['bms3o_t_tmp_dirs'][] = $dir;
 	$image = imagecreatetruecolor( $width, $height );
 	imagefill( $image, 0, 0, imagecolorallocate( $image, wp_rand( 0, 255 ), wp_rand( 0, 255 ), wp_rand( 0, 255 ) ) );
