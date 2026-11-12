@@ -106,7 +106,12 @@ bms3o_t_section( 'Object locks of the cleanup outlast its delete requests' );
 list( $id, $file, $public ) = bms3o_t_leftover( 'safety-deadline.png' );
 bms3o_t( in_array( $public, bms3o_t_queued_keys(), true ), 'The public copy waits in the queue' );
 
-$seen  = array();
+$seen = array();
+// A filter that raises the timeout must not break the bound.
+$long  = static function ( $args ) {
+	$args['timeout'] = 900;
+	return $args;
+};
 $probe = static function ( $pre, $args, $url ) use ( &$seen, $bucket, $public ) {
 	if ( false === $pre && 'POST' === $args['method'] && false !== strpos( $url, '?delete' ) ) {
 		$lock   = 'bms3o_object_lock_' . Orphans::hash( $bucket, $public );
@@ -118,10 +123,7 @@ $probe = static function ( $pre, $args, $url ) use ( &$seen, $bucket, $public ) 
 	}
 	return $pre;
 };
-add_filter( 'bms3o_http_args', $long = static function ( $args ) { // phpcs:ignore Squiz.PHP.DisallowMultipleAssignments.Found
-	$args['timeout'] = 900; // A filter that raises the timeout must not break the bound.
-	return $args;
-} );
+add_filter( 'bms3o_http_args', $long );
 add_filter( 'pre_http_request', $probe, 10, 3 );
 $offloader->process_orphans();
 remove_filter( 'pre_http_request', $probe, 10 );
