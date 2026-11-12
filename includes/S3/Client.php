@@ -110,6 +110,13 @@ class Client {
 	private $retries;
 
 	/**
+	 * Point in time (microtime) after which no request may run, 0 for none.
+	 *
+	 * @var float
+	 */
+	private $deadline = 0.0;
+
+	/**
 	 * Size above which copies use a multipart copy.
 	 *
 	 * @var int
@@ -341,6 +348,21 @@ class Client {
 				throw $e;
 			}
 		}
+	}
+
+	/**
+	 * Returns a copy of the client whose requests all end by a point in time:
+	 * the timeout of every request is shortened to the time left, retries that
+	 * would end later are skipped and no request starts after it. Callers that
+	 * hold a lock while they wait for the requests can rely on this bound.
+	 *
+	 * @param float $deadline Point in time (microtime(true)).
+	 * @return Client
+	 */
+	public function with_deadline( $deadline ) {
+		$client           = clone $this;
+		$client->deadline = (float) $deadline;
+		return $client;
 	}
 
 	/**
@@ -699,6 +721,9 @@ class Client {
 	private function request( $method, $key, array $query = array(), array $headers = array(), $body = '', $filename = '' ) {
 		for ( $attempt = 0; ; ++$attempt ) {
 			$started = microtime( true );
+			if ( $this->deadline > 0 && $started >= $this->deadline ) {
+				throw new S3Exception( 'The time limit of the operation was reached before the request was sent.' );
+			}
 			try {
 				return $this->send( $method, $key, $query, $headers, $body, $filename );
 			} catch ( S3Exception $e ) {
@@ -708,7 +733,11 @@ class Client {
 				if ( $attempt >= $this->retries || ( 0 !== $status && ! in_array( $status, self::RETRY_STATUS, true ) ) || microtime( true ) - $started > 60 ) {
 					throw $e;
 				}
-				usleep( (int) ( 500000 * pow( 2, $attempt ) ) + wp_rand( 0, 250000 ) );
+				$pause = (int) ( 500000 * pow( 2, $attempt ) ) + wp_rand( 0, 250000 );
+				if ( $this->deadline > 0 && microtime( true ) + $pause / 1000000 >= $this->deadline ) {
+					throw $e;
+				}
+				usleep( $pause );
 			}
 		}
 	}
@@ -788,6 +817,15 @@ class Client {
 		 * @param string $url    Request URL.
 		 */
 		$args = apply_filters( 'bms3o_http_args', $args, $method, $url );
+
+		if ( $this->deadline > 0 ) {
+			// Applied after the filter: the bound must hold whatever the filter returns.
+			$left = $this->deadline - microtime( true );
+			if ( $left <= 0 ) {
+				throw new S3Exception( 'The time limit of the operation was reached before the request was sent.' );
+			}
+			$args['timeout'] = min( isset( $args['timeout'] ) ? (float) $args['timeout'] : (float) $this->timeout, max( 0.5, $left ) );
+		}
 
 		$response = wp_remote_request( $url, $args );
 		if ( is_wp_error( $response ) ) {

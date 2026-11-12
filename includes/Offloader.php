@@ -25,6 +25,34 @@ final class Offloader {
 	const ORPHANS_FAILING = 3;
 
 	/**
+	 * Objects the cleanup locks and deletes at a time.
+	 */
+	const CLEANUP_CHUNK = 100;
+
+	/**
+	 * Seconds by which all delete requests of a chunk have ended (the S3 client
+	 * shortens timeouts and skips retries accordingly).
+	 */
+	const CLEANUP_TIME = 60;
+
+	/**
+	 * Seconds the object locks of the cleanup outlast its delete requests.
+	 */
+	const CLEANUP_MARGIN = 60;
+
+	/**
+	 * Option with paths whose object may have been deleted although it was in use again.
+	 */
+	const CONFLICTS_OPTION = 'bms3o_cleanup_conflicts';
+
+	/**
+	 * Results of delete_or_queue().
+	 */
+	const DELETED      = 'deleted';
+	const QUEUED       = 'queued';
+	const QUEUE_FAILED = 'queue_failed';
+
+	/**
 	 * Settings.
 	 *
 	 * @var Settings
@@ -284,7 +312,7 @@ final class Offloader {
 			}
 
 			$claim = $this->claim_key( $bucket, $key );
-			if ( '' === $claim ) {
+			if ( false === $claim ) {
 				$result['errors'][ $path ] = __( 'The object is being cleaned up right now. Please try again.', 'bm-s3-offload' );
 				continue;
 			}
@@ -292,7 +320,7 @@ final class Offloader {
 			try {
 				$client->put_file( $key, $file, $this->upload_headers( $path, $is_private ) );
 			} catch ( S3Exception $e ) {
-				$this->release_key( $bucket, $key, $claim );
+				$this->release_key( $bucket, $key, $claim, false );
 				$result['errors'][ $path ] = $e->getMessage();
 				continue;
 			}
@@ -310,7 +338,7 @@ final class Offloader {
 					'local_mtime'   => $mtime,
 				)
 			);
-			$this->release_key( $bucket, $key, $claim );
+			$this->release_key( $bucket, $key, $claim, $saved );
 			if ( ! $saved ) {
 				// The item still points to the previous object: keep that one. The new object
 				// is only an orphan if it lives under another key.
@@ -324,10 +352,14 @@ final class Offloader {
 			// The key moved within the bucket (e.g. privacy changed): remove the old object once
 			// the item points to the new one, but only if it belongs to this site's key space (never another
 			// site's object). Failed deletions are retried by the hourly cron.
-			if ( $item && $item['bucket'] === $bucket && $item['object_key'] !== $key && $this->owns_key( $item['object_key'] )
-				&& ! $this->delete_or_queue( $item['bucket'], $item['object_key'], $path ) && $is_private && ! $item['is_private'] ) {
-				// A leftover public copy of a file that became private stays readable: report it.
-				$result['errors'][ $path ] = __( 'The previous copy could not be deleted yet. It stays reachable until the hourly cleanup has removed it.', 'bm-s3-offload' );
+			if ( $item && $item['bucket'] === $bucket && $item['object_key'] !== $key && $this->owns_key( $item['object_key'] ) ) {
+				$deleted = $this->delete_or_queue( $item['bucket'], $item['object_key'], $path );
+				if ( self::QUEUE_FAILED === $deleted ) {
+					$result['errors'][ $path ] = self::leftover_message( $deleted, $item['object_key'] );
+				} elseif ( self::DELETED !== $deleted && $is_private && ! $item['is_private'] ) {
+					// A leftover public copy of a file that became private stays readable: report it.
+					$result['errors'][ $path ] = self::leftover_message( $deleted, $item['object_key'] );
+				}
 			}
 
 			$result['uploaded'][] = $path;
@@ -607,7 +639,7 @@ final class Offloader {
 			}
 
 			$claim = $this->claim_key( $item['bucket'], $key );
-			if ( '' === $claim ) {
+			if ( false === $claim ) {
 				$errors[ $path ] = __( 'The object is being cleaned up right now. Please try again.', 'bm-s3-offload' );
 				continue;
 			}
@@ -616,7 +648,7 @@ final class Offloader {
 				$client = $this->settings->client( $item['bucket'] );
 				$client->copy( $item['object_key'], $key, $this->upload_headers( $path, (bool) $is_private ), (int) $item['filesize'] );
 			} catch ( \Exception $e ) {
-				$this->release_key( $item['bucket'], $key, $claim );
+				$this->release_key( $item['bucket'], $key, $claim, false );
 				$errors[ $path ] = $e->getMessage();
 				continue;
 			}
@@ -625,7 +657,7 @@ final class Offloader {
 			$item['object_key'] = $key;
 			$item['is_private'] = (bool) $is_private;
 			$saved              = $this->items->save( $item );
-			$this->release_key( $item['bucket'], $key, $claim );
+			$this->release_key( $item['bucket'], $key, $claim, $saved );
 			if ( ! $saved ) {
 				// The item still points to the old object: keep it and drop the copy.
 				if ( $old_key !== $key ) {
@@ -636,8 +668,11 @@ final class Offloader {
 			}
 
 			// A leftover public copy would stay readable: report it and retry hourly.
-			if ( $old_key !== $key && $this->owns_key( $old_key ) && ! $this->delete_or_queue( $item['bucket'], $old_key, $path ) ) {
-				$errors[ $path ] = __( 'The previous copy could not be deleted yet. It stays reachable until the hourly cleanup has removed it.', 'bm-s3-offload' );
+			if ( $old_key !== $key && $this->owns_key( $old_key ) ) {
+				$deleted = $this->delete_or_queue( $item['bucket'], $old_key, $path );
+				if ( self::DELETED !== $deleted ) {
+					$errors[ $path ] = self::leftover_message( $deleted, $old_key );
+				}
 			}
 		}
 
@@ -651,26 +686,46 @@ final class Offloader {
 	 * @param string $bucket Bucket.
 	 * @param string $key    Object key.
 	 * @param string $path   Relative path the object belonged to.
-	 * @return bool Whether the object has been deleted.
+	 * @return string self::DELETED, self::QUEUED or self::QUEUE_FAILED (neither deleted nor queued).
 	 */
 	public function delete_or_queue( $bucket, $key, $path ) {
 		try {
 			$this->settings->client( (string) $bucket )->delete( $key );
-			return true;
+			return self::DELETED;
 		} catch ( \Exception $e ) {
-			$this->queue_orphans( array( array( (string) $bucket, (string) $key, (string) $path ) ) );
-			return false;
+			return $this->queue_orphans( array( array( (string) $bucket, (string) $key, (string) $path ) ) ) ? self::QUEUED : self::QUEUE_FAILED;
 		}
 	}
 
 	/**
-	 * Remembers objects that still have to be deleted from the bucket.
+	 * Message about a previous copy that is still in the bucket.
+	 *
+	 * @param string $state Result of delete_or_queue().
+	 * @param string $key   Object key.
+	 * @return string
+	 */
+	private static function leftover_message( $state, $key ) {
+		if ( self::QUEUE_FAILED === $state ) {
+			/* translators: %s: object key */
+			return sprintf( __( 'The previous copy could neither be deleted nor be queued for the cleanup (database error). It stays in the bucket until it is deleted manually: %s', 'bm-s3-offload' ), $key );
+		}
+		return __( 'The previous copy could not be deleted yet. It stays reachable until the hourly cleanup has removed it.', 'bm-s3-offload' );
+	}
+
+	/**
+	 * Remembers objects that still have to be deleted from the bucket. Objects
+	 * that cannot be queued are written to the PHP error log.
 	 *
 	 * @param array<int,array{0:string,1:string,2:string}> $objects Bucket, key and path of each object.
-	 * @return void
+	 * @return bool Whether all objects were queued.
 	 */
 	public function queue_orphans( array $objects ) {
-		$this->orphans->add( $objects, $this->current_storage() );
+		$failed = $this->orphans->add( $objects, $this->current_storage() );
+		foreach ( $failed as $object ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- No other channel: the object would otherwise be forgotten silently.
+			error_log( sprintf( 'BM S3 Offload: object %s/%s could not be queued for deletion; delete it manually.', $object[0], $object[1] ) );
+		}
+		return empty( $failed );
 	}
 
 	/**
@@ -745,14 +800,16 @@ final class Offloader {
 
 	/**
 	 * Claims a key before an object is written to it. When the key waits for
-	 * deletion in the cleanup queue, the cleanup of that object is locked out
-	 * and the queue entry is removed, so the cleanup can never delete the new
-	 * object.
+	 * deletion in the cleanup queue, the entry is marked as claimed under the
+	 * object lock (so a cleanup that is deleting the object right now finishes
+	 * first) and the cleanup leaves it alone from then on. The lock is released
+	 * right away: the claim does not depend on how long the write takes.
 	 *
 	 * @param string $bucket Bucket.
 	 * @param string $key    Object key.
-	 * @return string|null Lock token to release afterwards, null if the key is not
-	 *                     queued (nothing to claim), '' if the cleanup is busy with it.
+	 * @return bool|null True if claimed, null if the key is not queued (nothing to
+	 *                   claim), false if the cleanup is busy with it or the claim
+	 *                   could not be recorded.
 	 */
 	private function claim_key( $bucket, $key ) {
 		if ( ! $this->orphans->has( $bucket, $key ) ) {
@@ -764,32 +821,47 @@ final class Offloader {
 		 *
 		 * @param float $seconds Wait time.
 		 */
-		$token = Lock::acquire( self::object_lock( $bucket, $key ), 120, (float) apply_filters( 'bms3o_object_lock_wait', 10.0 ) );
-		if ( '' !== $token ) {
-			$this->orphans->remove( $bucket, $key );
+		$lock  = self::object_lock( $bucket, $key );
+		$token = Lock::acquire( $lock, 30, (float) apply_filters( 'bms3o_object_lock_wait', 10.0 ) );
+		if ( '' === $token ) {
+			return false;
 		}
-		return $token;
+		$claimed = $this->orphans->claim( $bucket, $key );
+		Lock::release( $lock, $token );
+		return $claimed;
 	}
 
 	/**
-	 * Releases a claim of claim_key().
+	 * Ends a claim of claim_key(): after a successful write the entry is
+	 * removed (the key is in use), otherwise it is due for the cleanup again.
 	 *
-	 * @param string      $bucket Bucket.
-	 * @param string      $key    Object key.
-	 * @param string|null $token  Token.
+	 * @param string    $bucket  Bucket.
+	 * @param string    $key     Object key.
+	 * @param bool|null $claim   Result of claim_key().
+	 * @param bool      $written Whether the object was written and recorded.
 	 * @return void
 	 */
-	private function release_key( $bucket, $key, $token ) {
-		if ( is_string( $token ) && '' !== $token ) {
-			Lock::release( self::object_lock( $bucket, $key ), $token );
+	private function release_key( $bucket, $key, $claim, $written ) {
+		if ( true !== $claim ) {
+			return;
+		}
+		if ( $written ) {
+			$this->orphans->remove( $bucket, $key );
+		} else {
+			$this->orphans->unclaim( $bucket, $key );
 		}
 	}
 
 	/**
 	 * Deletes queued orphans (hourly cron). Objects that are in use again
-	 * (e.g. a file was made public again) are never deleted: every object is
-	 * locked before it is checked and deleted, and operations that write to a
-	 * queued key take the same lock first.
+	 * (e.g. a file was made public again) are never deleted.
+	 *
+	 * The objects are processed in chunks. Every object of a chunk is locked
+	 * before it is checked; operations that write to a queued key claim it
+	 * under the same lock. The delete requests of a chunk end by a deadline
+	 * (the S3 client shortens their timeouts and skips retries accordingly) that
+	 * lies well before the locks expire, so a lock cannot run out while a delete
+	 * request is still on its way.
 	 *
 	 * @param int $limit Maximum number of objects per run.
 	 * @return int Number of objects still waiting.
@@ -799,10 +871,26 @@ final class Offloader {
 			return $this->orphans->count();
 		}
 
-		// Lock the due objects; objects being written right now are left for the next run.
-		$locked = array();
-		foreach ( $this->orphans->due( $this->current_storage(), $limit ) as $row ) {
-			$token = Lock::acquire( self::object_lock( $row['bucket'], $row['object_key'] ), 120 );
+		foreach ( array_chunk( $this->orphans->due( $this->current_storage(), $limit ), self::CLEANUP_CHUNK ) as $chunk ) {
+			$this->process_orphan_chunk( $chunk );
+		}
+
+		return $this->orphans->count();
+	}
+
+	/**
+	 * Deletes a chunk of queued orphans.
+	 *
+	 * @param array[] $rows Queue rows.
+	 * @return void
+	 */
+	private function process_orphan_chunk( array $rows ) {
+		// The deadline is taken before the first lock, so it lies at least
+		// CLEANUP_MARGIN seconds before every lock of the chunk expires.
+		$deadline = microtime( true ) + self::CLEANUP_TIME;
+		$locked   = array();
+		foreach ( $rows as $row ) {
+			$token = Lock::acquire( self::object_lock( $row['bucket'], $row['object_key'] ), self::CLEANUP_TIME + self::CLEANUP_MARGIN );
 			if ( '' !== $token ) {
 				$row['token'] = $token;
 				$locked[]     = $row;
@@ -817,28 +905,33 @@ final class Offloader {
 
 			$by_bucket = array();
 			foreach ( $locked as $row ) {
-				if ( ! $this->orphans->has( $row['bucket'], $row['object_key'] ) ) {
-					continue; // Claimed by an operation that writes to the key again.
+				$entry = $this->orphans->get( $row['bucket'], $row['object_key'] );
+				if ( null === $entry || Orphans::is_claimed( $entry ) ) {
+					continue; // Removed meanwhile, or claimed by an operation that writes to the key.
 				}
 				$item = isset( $items[ $row['path'] ] ) ? $items[ $row['path'] ] : null;
 				if ( $item && $item['bucket'] === $row['bucket'] && $item['object_key'] === $row['object_key'] ) {
 					$this->orphans->remove( $row['bucket'], $row['object_key'] ); // Referenced again: never delete.
 					continue;
 				}
-				$by_bucket[ $row['bucket'] ][] = $row['object_key'];
+				$by_bucket[ $row['bucket'] ][] = $row;
 			}
 
-			foreach ( $by_bucket as $bucket => $keys ) {
+			foreach ( $by_bucket as $bucket => $bucket_rows ) {
+				$keys = array_column( $bucket_rows, 'object_key' );
 				try {
-					$errors = $this->settings->client( (string) $bucket )->delete_many( $keys );
+					$errors = $this->settings->client( (string) $bucket )->with_deadline( $deadline )->delete_many( $keys );
 				} catch ( \Exception $e ) {
 					$errors = array_fill_keys( $keys, $e->getMessage() );
 				}
-				foreach ( $keys as $key ) {
-					if ( isset( $errors[ $key ] ) ) {
-						$this->orphans->failed( (string) $bucket, $key ); // Due again later, after the others.
-					} else {
-						$this->orphans->remove( (string) $bucket, $key );
+				foreach ( $bucket_rows as $row ) {
+					if ( isset( $errors[ $row['object_key'] ] ) ) {
+						$this->orphans->failed( (string) $bucket, $row['object_key'] ); // Due again later, after the others.
+						continue;
+					}
+					$this->orphans->remove( (string) $bucket, $row['object_key'] );
+					if ( ! Lock::holds( self::object_lock( $bucket, $row['object_key'] ), $row['token'] ) ) {
+						$this->check_conflict( (string) $bucket, $row['object_key'], $row['path'] );
 					}
 				}
 			}
@@ -847,8 +940,57 @@ final class Offloader {
 				Lock::release( self::object_lock( $row['bucket'], $row['object_key'] ), $row['token'] );
 			}
 		}
+	}
 
-		return $this->orphans->count();
+	/**
+	 * Checks an object whose lock was lost while it was being deleted (the
+	 * deadline makes this practically impossible; e.g. the database clock
+	 * jumped). If the key is in use again, the object is uploaded again from
+	 * the local copy; otherwise the path is reported.
+	 *
+	 * @param string $bucket Bucket.
+	 * @param string $key    Object key.
+	 * @param string $path   Relative path.
+	 * @return void
+	 */
+	private function check_conflict( $bucket, $key, $path ) {
+		$this->items->forget( array( $path ) );
+		$item  = $this->items->get( $path );
+		$entry = $this->orphans->get( $bucket, $key );
+		if ( $item && $item['bucket'] === $bucket && $item['object_key'] === $key ) {
+			$result = $this->verify( $item, true );
+			if ( 'ok' === $result || 'fixed' === $result ) {
+				return;
+			}
+		} elseif ( null === $entry || ! Orphans::is_claimed( $entry ) ) {
+			return; // Not in use.
+		}
+
+		$conflicts = get_option( self::CONFLICTS_OPTION, array() );
+		$conflicts = is_array( $conflicts ) ? $conflicts : array();
+		unset( $conflicts[ $path ] );
+		$conflicts[ $path ] = time();
+		update_option( self::CONFLICTS_OPTION, array_slice( $conflicts, -100, null, true ), false );
+	}
+
+	/**
+	 * Paths whose object may have been deleted by the cleanup although it was
+	 * in use again (see check_conflict()).
+	 *
+	 * @return string[]
+	 */
+	public function cleanup_conflicts() {
+		$conflicts = get_option( self::CONFLICTS_OPTION, array() );
+		return is_array( $conflicts ) ? array_map( 'strval', array_keys( $conflicts ) ) : array();
+	}
+
+	/**
+	 * Forgets reported conflicts (after a complete "wp bm-s3 verify").
+	 *
+	 * @return void
+	 */
+	public function clear_cleanup_conflicts() {
+		delete_option( self::CONFLICTS_OPTION );
 	}
 
 	/**

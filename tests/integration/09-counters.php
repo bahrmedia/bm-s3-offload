@@ -54,7 +54,7 @@ $wpdb->query( "ALTER TABLE {$table} DROP INDEX source_local" );
 update_option( 'bms3o_db_version', '3' );
 Items::install();
 $indexes = $wpdb->get_col( "SHOW INDEX FROM {$table} WHERE Key_name = 'source_local'", 4 );
-bms3o_t( 3 === count( $indexes ) && '4' === get_option( 'bms3o_db_version' ), 'The upgrade from schema 3 adds the index', $indexes );
+bms3o_t( 3 === count( $indexes ) && Items::DB_VERSION === get_option( 'bms3o_db_version' ), 'The upgrade from schema 3 adds the index', $indexes );
 
 $plan = $wpdb->get_results( $wpdb->prepare( "EXPLAIN SELECT COUNT(DISTINCT source_id) FROM {$table} FORCE INDEX (source_local) WHERE source_type = %s AND local_removed = %d", Items::SOURCE_POST, 1 ), ARRAY_A );
 bms3o_t( 'source_local' === $plan[0]['key'] && false !== stripos( (string) $plan[0]['Extra'], 'index' ), 'The counter of local copies is answered from the index alone', $plan );

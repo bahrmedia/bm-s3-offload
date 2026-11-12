@@ -1,6 +1,6 @@
 msgid ""
 msgstr ""
-"Project-Id-Version: BM S3 Offload 1.0.5\n"
+"Project-Id-Version: BM S3 Offload 1.0.6\n"
 "Report-Msgid-Bugs-To: https://wordpress.org/support/plugin/bm-s3-offload\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -561,26 +561,26 @@ msgid "Settings saved."
 msgstr "Einstellungen gespeichert."
 
 #. translators: %s: link to the settings
-#: includes/Admin/SettingsPage.php:818
+#: includes/Admin/SettingsPage.php:835
 #, php-format
 msgid "BM S3 Offload cannot decrypt the stored secret key, probably because the WordPress security keys (salts) were changed. Offloading is paused. %s"
 msgstr "BM S3 Offload kann den gespeicherten Secret Key nicht entschlüsseln, vermutlich wurden die WordPress-Sicherheitsschlüssel (Salts) geändert. Das Auslagern ist pausiert. %s"
 
-#: includes/Admin/SettingsPage.php:819
+#: includes/Admin/SettingsPage.php:836
 msgid "Enter the secret key again"
 msgstr "Secret Key erneut eingeben"
 
 #. translators: %s: link to the settings
-#: includes/Admin/SettingsPage.php:828
+#: includes/Admin/SettingsPage.php:845
 #, php-format
 msgid "BM S3 Offload is not configured yet. %s"
 msgstr "BM S3 Offload ist noch nicht eingerichtet. %s"
 
-#: includes/Admin/SettingsPage.php:829
+#: includes/Admin/SettingsPage.php:846
 msgid "Configure the bucket"
 msgstr "Bucket einrichten"
 
-#: includes/Admin/SettingsPage.php:835
+#: includes/Admin/SettingsPage.php:852
 msgid "The PHP extension SimpleXML is missing. Listing objects and error messages from the bucket will not work."
 msgstr "Die PHP-Erweiterung SimpleXML fehlt. Das Auflisten von Objekten und Fehlermeldungen des Buckets funktionieren nicht."
 
@@ -594,54 +594,54 @@ msgstr "Fehler beim Synchronisieren von %s"
 msgid "Files in protected directories (BuddyBoss, WooCommerce, Easy Digital Downloads) cannot be made public."
 msgstr "Dateien in geschützten Verzeichnissen (BuddyBoss, WooCommerce, Easy Digital Downloads) können nicht öffentlich gemacht werden."
 
-#: includes/Offloader.php:1140
-#: includes/Offloader.php:1147
+#: includes/Offloader.php:1282
+#: includes/Offloader.php:1289
 msgid "Configuration"
 msgstr "Konfiguration"
 
-#: includes/Offloader.php:1140
+#: includes/Offloader.php:1282
 msgid "Endpoint, bucket, access key and secret key are required."
 msgstr "Endpoint, Bucket, Access Key und Secret Key sind erforderlich."
 
-#: includes/Offloader.php:1159
-#: includes/Offloader.php:1161
+#: includes/Offloader.php:1301
+#: includes/Offloader.php:1303
 msgid "Upload"
 msgstr "Upload"
 
-#: includes/Offloader.php:1167
-#: includes/Offloader.php:1169
+#: includes/Offloader.php:1309
+#: includes/Offloader.php:1311
 msgid "Download"
 msgstr "Download"
 
-#: includes/Offloader.php:1167
+#: includes/Offloader.php:1309
 msgid "Content mismatch."
 msgstr "Inhalt stimmt nicht überein."
 
-#: includes/Offloader.php:1183
+#: includes/Offloader.php:1325
 msgid "Public delivery"
 msgstr "Öffentliche Auslieferung"
 
 #. translators: 1: HTTP status, 2: URL
-#: includes/Offloader.php:1187
+#: includes/Offloader.php:1329
 #, php-format
 msgid "HTTP %1$s for %2$s – make the object prefix publicly readable (bucket policy) or enable signed URLs for all files."
 msgstr "HTTP %1$s für %2$s – das Objekt-Präfix öffentlich lesbar machen (Bucket-Policy) oder signierte URLs für alle Dateien aktivieren."
 
-#: includes/Offloader.php:1197
+#: includes/Offloader.php:1339
 msgid "Private objects are protected"
 msgstr "Private Objekte sind geschützt"
 
 #. translators: %s: HTTP status
-#: includes/Offloader.php:1201
+#: includes/Offloader.php:1343
 #, php-format
 msgid "Anonymous request returned HTTP %s. Private files are publicly readable – restrict the bucket policy to the public prefix."
 msgstr "Ein anonymer Abruf lieferte HTTP %s. Private Dateien sind öffentlich lesbar – die Bucket-Policy auf das öffentliche Präfix beschränken."
 
-#: includes/Offloader.php:1215
+#: includes/Offloader.php:1357
 msgid "Signed URLs"
 msgstr "Signierte URLs"
 
-#: includes/Offloader.php:1218
+#: includes/Offloader.php:1360
 msgid "Delete"
 msgstr "Löschen"
 
@@ -678,20 +678,19 @@ msgstr "Alle Objekte wurden auf den neuen Endpunkt kopiert (z. B. mit rclone)."
 msgid "Files are offloaded to the current endpoint. A new endpoint is only accepted with this confirmation. Afterwards check the new storage with \"wp bm-s3 verify\"."
 msgstr "Dateien liegen auf dem aktuellen Endpunkt. Ein neuer Endpunkt wird nur mit dieser Bestätigung übernommen. Den neuen Speicher danach mit \"wp bm-s3 verify\" prüfen."
 
-#: includes/Offloader.php:320
+#: includes/Offloader.php:348
 msgid "The upload could not be recorded in the database."
 msgstr "Der Upload konnte nicht in der Datenbank gespeichert werden."
 
-#: includes/Offloader.php:533
+#: includes/Offloader.php:565
 msgid "The restored file could not be recorded in the database."
 msgstr "Die wiederhergestellte Datei konnte nicht in der Datenbank gespeichert werden."
 
-#: includes/Offloader.php:634
+#: includes/Offloader.php:666
 msgid "The new state could not be recorded in the database."
 msgstr "Der neue Zustand konnte nicht in der Datenbank gespeichert werden."
 
-#: includes/Offloader.php:330
-#: includes/Offloader.php:640
+#: includes/Offloader.php:712
 msgid "The previous copy could not be deleted yet. It stays reachable until the hourly cleanup has removed it."
 msgstr "Die bisherige Kopie konnte noch nicht gelöscht werden. Sie bleibt erreichbar, bis die stündliche Bereinigung sie entfernt hat."
 
@@ -743,7 +742,21 @@ msgid_plural "%d objects could not be deleted from the bucket after several atte
 msgstr[0] "%d Objekt konnte nach mehreren Versuchen nicht aus dem Bucket gelöscht werden (z. B. fehlende Löschberechtigung). Es wird stündlich erneut versucht; bis dahin bleibt es im Bucket und ist, falls es eine bisherige öffentliche Kopie ist, erreichbar."
 msgstr[1] "%d Objekte konnten nach mehreren Versuchen nicht aus dem Bucket gelöscht werden (z. B. fehlende Löschberechtigung). Sie werden stündlich erneut versucht; bis dahin bleiben sie im Bucket und sind, falls es bisherige öffentliche Kopien sind, erreichbar."
 
-#: includes/Offloader.php:288
-#: includes/Offloader.php:611
+#: includes/Offloader.php:316
+#: includes/Offloader.php:643
 msgid "The object is being cleaned up right now. Please try again."
 msgstr "Das Objekt wird gerade bereinigt. Bitte erneut versuchen."
+
+#. translators: 1: number of files, 2: list of paths
+#: includes/Admin/SettingsPage.php:808
+#, php-format
+msgid "The cleanup may have deleted the object of %1$d file although it was in use again, and it could not be restored from a local copy: %2$s. Please check it with \"wp bm-s3 verify --fix\" (this notice disappears afterwards)."
+msgid_plural "The cleanup may have deleted the objects of %1$d files although they were in use again, and they could not be restored from local copies: %2$s. Please check them with \"wp bm-s3 verify --fix\" (this notice disappears afterwards)."
+msgstr[0] "Die Bereinigung hat das Objekt von %1$d Datei möglicherweise gelöscht, obwohl es wieder verwendet wurde, und es konnte nicht aus einer lokalen Kopie wiederhergestellt werden: %2$s. Bitte mit „wp bm-s3 verify --fix“ prüfen (danach verschwindet dieser Hinweis)."
+msgstr[1] "Die Bereinigung hat die Objekte von %1$d Dateien möglicherweise gelöscht, obwohl sie wieder verwendet wurden, und sie konnten nicht aus lokalen Kopien wiederhergestellt werden: %2$s. Bitte mit „wp bm-s3 verify --fix“ prüfen (danach verschwindet dieser Hinweis)."
+
+#. translators: %s: object key
+#: includes/Offloader.php:710
+#, php-format
+msgid "The previous copy could neither be deleted nor be queued for the cleanup (database error). It stays in the bucket until it is deleted manually: %s"
+msgstr "Die bisherige Kopie konnte weder gelöscht noch für die Bereinigung vorgemerkt werden (Datenbankfehler). Sie bleibt im Bucket, bis sie manuell gelöscht wird: %s"

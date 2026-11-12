@@ -27,7 +27,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Items {
 
-	const DB_VERSION  = '4';
+	const DB_VERSION  = '5';
 	const CACHE_GROUP = 'bms3o_items';
 	const SOURCE_POST = 'attachment';
 	const NOT_FOUND   = 0;
@@ -83,9 +83,11 @@ final class Items {
 ) {$collate};"
 		);
 
-		Orphans::install();
-
-		update_option( 'bms3o_db_version', self::DB_VERSION, true );
+		// Without a complete migration of the cleanup queue the version stays, so the
+		// next request tries again (the legacy queue is kept until then).
+		if ( Orphans::install() ) {
+			update_option( 'bms3o_db_version', self::DB_VERSION, true );
+		}
 	}
 
 	/**

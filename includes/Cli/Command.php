@@ -246,6 +246,8 @@ final class Command {
 			$fetched = count( $page );
 		} while ( $fetched === $per_page );
 		$progress->finish();
+		// Every item has been checked; files that are still missing were listed above.
+		$this->plugin->offloader->clear_cleanup_conflicts();
 
 		$summary = sprintf( '%d ok, %d fixed, %d missing, %d errors.', $counts['ok'], $counts['fixed'], $counts['missing'], $counts['error'] );
 		if ( $counts['missing'] || $counts['error'] ) {

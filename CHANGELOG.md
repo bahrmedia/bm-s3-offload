@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.0.6] – 2026-11-12
+
+### Fixed
+
+- The object locks of the cleanup (120 seconds) could expire while a delete request was still running (timeout 300 seconds plus retries, all objects locked up front). Another request could then reuse the key, and the late delete removed the object in use. The cleanup now locks and deletes in chunks of 100 objects; the delete requests of a chunk end by a deadline 60 seconds after the chunk started (timeouts are shortened to the time left, also when `bms3o_http_args` raises them, and retries that would end later are skipped), and the locks last 60 seconds longer. Should a lock be lost anyway, the cleanup checks the key: an object in use again is uploaded again from the local copy, otherwise the file is reported in the admin until `wp bm-s3 verify` has run.
+- A failed upload or copy to a key that waited for deletion removed the queue entry, so a leftover public copy stayed reachable. Writes now claim the entry instead of removing it (schema version 5); the cleanup leaves claimed entries alone, a successful write removes the entry and a failed one releases the claim. Claims of processes that died expire after a day.
+- Database errors while queuing deletions were ignored: `Orphans::add()` now returns the objects that were not written, `queue_orphans()` reports and logs them, and the message about a leftover copy names the object that has to be deleted manually. The migration of the 1.0.1 – 1.0.3 queue only deletes the old option after every entry has been written; otherwise the schema version stays and the migration runs again.
+
 ## [1.0.5] – 2026-11-12
 
 ### Changed

@@ -32,6 +32,12 @@ final class Orphans {
 	const RETRY_DELAY = 300;
 
 	/**
+	 * Seconds after which a claim of a process that died while writing to the
+	 * key expires (the cleanup then checks the entry again).
+	 */
+	const CLAIM_TTL = DAY_IN_SECONDS;
+
+	/**
 	 * Table name.
 	 *
 	 * @return string
@@ -42,9 +48,10 @@ final class Orphans {
 	}
 
 	/**
-	 * Creates the table and migrates the legacy option.
+	 * Creates the table and migrates the legacy option. The option is only
+	 * deleted when every entry has been written to the table.
 	 *
-	 * @return void
+	 * @return bool Whether the table exists and the migration is complete.
 	 */
 	public static function install() {
 		global $wpdb;
@@ -63,24 +70,38 @@ final class Orphans {
   storage varchar(255) NOT NULL DEFAULT '',
   attempts int(10) unsigned NOT NULL DEFAULT 0,
   next_attempt int(10) unsigned NOT NULL DEFAULT 0,
+  claims int(10) unsigned NOT NULL DEFAULT 0,
+  claimed_until int(10) unsigned NOT NULL DEFAULT 0,
   PRIMARY KEY  (id),
   UNIQUE KEY object_hash (object_hash),
   KEY next_attempt (next_attempt)
 ) {$collate};"
 		);
 
+		$table = self::table();
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		if ( $table !== $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) ) ) {
+			return false;
+		}
+
 		$legacy = get_option( self::LEGACY_OPTION, null );
 		if ( is_array( $legacy ) ) {
-			$store = new self();
+			$store  = new self();
+			$failed = array();
 			foreach ( $legacy as $entry ) {
-				if ( isset( $entry['bucket'], $entry['key'], $entry['path'] ) ) {
-					$store->add( array( array( $entry['bucket'], $entry['key'], $entry['path'] ) ), isset( $entry['storage'] ) ? (string) $entry['storage'] : '' );
+				if ( isset( $entry['bucket'], $entry['key'], $entry['path'] ) && $store->add( array( array( $entry['bucket'], $entry['key'], $entry['path'] ) ), isset( $entry['storage'] ) ? (string) $entry['storage'] : '' ) ) {
+					$failed[] = $entry;
 				}
+			}
+			if ( ! empty( $failed ) ) {
+				update_option( self::LEGACY_OPTION, $failed, false ); // Retried on the next upgrade check.
+				return false;
 			}
 		}
 		if ( null !== $legacy ) {
 			delete_option( self::LEGACY_OPTION );
 		}
+		return true;
 	}
 
 	/**
@@ -99,19 +120,19 @@ final class Orphans {
 	 *
 	 * @param array<int,array{0:string,1:string,2:string}> $objects Bucket, key and path of each object.
 	 * @param string                                       $storage Storage identity.
-	 * @return int Number of objects that could not be queued (queue full).
+	 * @return array<int,array{0:string,1:string,2:string}> Objects that could not be queued (queue full or database error).
 	 */
 	public function add( array $objects, $storage ) {
 		global $wpdb;
-		$table   = self::table();
-		$skipped = 0;
+		$table  = self::table();
+		$failed = array();
 		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery
 		foreach ( $objects as $object ) {
 			if ( $this->count() >= self::MAX && ! $this->has( $object[0], $object[1] ) ) {
-				++$skipped;
+				$failed[] = $object;
 				continue;
 			}
-			$wpdb->query(
+			$written = $wpdb->query(
 				$wpdb->prepare(
 					"INSERT INTO {$table} (object_hash, bucket, object_key, path, storage) VALUES (%s, %s, %s, %s, %s)
 					ON DUPLICATE KEY UPDATE path = VALUES(path), storage = VALUES(storage)",
@@ -122,9 +143,12 @@ final class Orphans {
 					(string) $storage
 				)
 			);
+			if ( false === $written ) {
+				$failed[] = $object;
+			}
 		}
 		// phpcs:enable
-		return $skipped;
+		return $failed;
 	}
 
 	/**
@@ -153,7 +177,63 @@ final class Orphans {
 	}
 
 	/**
-	 * Entries that are due on a storage (entries without storage belong to any).
+	 * Entry of an object.
+	 *
+	 * @param string $bucket Bucket.
+	 * @param string $key    Object key.
+	 * @return array|null Row.
+	 */
+	public function get( $bucket, $key ) {
+		global $wpdb;
+		$table = self::table();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM {$table} WHERE object_hash = %s", self::hash( $bucket, $key ) ), ARRAY_A );
+		return is_array( $row ) ? $row : null;
+	}
+
+	/**
+	 * Whether an entry is claimed by an operation that writes to its key.
+	 *
+	 * @param array $row Row.
+	 * @return bool
+	 */
+	public static function is_claimed( array $row ) {
+		return (int) $row['claims'] > 0 && (int) $row['claimed_until'] > time();
+	}
+
+	/**
+	 * Claims a queued object for an operation that writes to its key: the
+	 * cleanup leaves it alone until the claim is released (or expires).
+	 *
+	 * @param string $bucket Bucket.
+	 * @param string $key    Object key.
+	 * @return bool False if the claim could not be recorded.
+	 */
+	public function claim( $bucket, $key ) {
+		global $wpdb;
+		$table = self::table();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery
+		$updated = $wpdb->query( $wpdb->prepare( "UPDATE {$table} SET claims = claims + 1, claimed_until = %d WHERE object_hash = %s", time() + self::CLAIM_TTL, self::hash( $bucket, $key ) ) );
+		return false !== $updated;
+	}
+
+	/**
+	 * Releases a claim (the write failed; the entry stays queued).
+	 *
+	 * @param string $bucket Bucket.
+	 * @param string $key    Object key.
+	 * @return void
+	 */
+	public function unclaim( $bucket, $key ) {
+		global $wpdb;
+		$table = self::table();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery
+		$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET claims = IF( claims > 0, claims - 1, 0 ) WHERE object_hash = %s", self::hash( $bucket, $key ) ) );
+	}
+
+	/**
+	 * Entries that are due on a storage (entries without storage belong to any),
+	 * except entries claimed by an operation that writes to their key.
 	 *
 	 * @param string $storage Storage identity.
 	 * @param int    $limit   Maximum number of entries.
@@ -163,7 +243,7 @@ final class Orphans {
 		global $wpdb;
 		$table = self::table();
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery
-		return (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE ( storage = %s OR storage = '' ) AND next_attempt <= %d ORDER BY next_attempt ASC, id ASC LIMIT %d", $storage, time(), max( 1, (int) $limit ) ), ARRAY_A );
+		return (array) $wpdb->get_results( $wpdb->prepare( "SELECT * FROM {$table} WHERE ( storage = %s OR storage = '' ) AND next_attempt <= %d AND ( claims = 0 OR claimed_until <= %d ) ORDER BY next_attempt ASC, id ASC LIMIT %d", $storage, time(), time(), max( 1, (int) $limit ) ), ARRAY_A );
 	}
 
 	/**

@@ -800,6 +800,23 @@ final class SettingsPage {
 			) . '</p></div>';
 		}
 
+		$conflicts = $ours ? $this->plugin->offloader->cleanup_conflicts() : array();
+		if ( ! empty( $conflicts ) ) {
+			echo '<div class="notice notice-error"><p>' . esc_html(
+				sprintf(
+					/* translators: 1: number of files, 2: list of paths */
+					_n(
+						'The cleanup may have deleted the object of %1$d file although it was in use again, and it could not be restored from a local copy: %2$s. Please check it with "wp bm-s3 verify --fix" (this notice disappears afterwards).',
+						'The cleanup may have deleted the objects of %1$d files although they were in use again, and they could not be restored from local copies: %2$s. Please check them with "wp bm-s3 verify --fix" (this notice disappears afterwards).',
+						count( $conflicts ),
+						'bm-s3-offload'
+					),
+					count( $conflicts ),
+					implode( ', ', array_slice( $conflicts, 0, 10 ) ) . ( count( $conflicts ) > 10 ? ', …' : '' )
+				)
+			) . '</p></div>';
+		}
+
 		$storage_error = $this->plugin->settings->storage_error();
 		if ( '' !== $storage_error ) {
 			echo '<div class="notice notice-error"><p>' . esc_html( $storage_error ) . '</p></div>';
