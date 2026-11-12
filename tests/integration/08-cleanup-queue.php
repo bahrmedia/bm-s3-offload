@@ -90,8 +90,8 @@ bms3o_t( ! bms3o_t_object_exists( $b ) && array() === bms3o_t_queued(), 'It is d
 
 bms3o_t_section( 'Entries are only executed on the storage they belong to' );
 
-$c       = bms3o_t_queue_object( 'c' );
-$other   = 'https://other-storage.invalid';
+$c     = bms3o_t_queue_object( 'c' );
+$other = 'https://other-storage.invalid';
 $offloader->orphan_store()->add( array( array( $bucket, $c, 'bms3o-test/queue-c.txt' ) ), $other );
 $offloader->process_orphans();
 bms3o_t( bms3o_t_object_exists( $c ) && array( $c ) === bms3o_t_queued(), 'An entry of another storage is neither executed nor dropped' );
