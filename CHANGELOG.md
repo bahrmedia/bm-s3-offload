@@ -2,6 +2,16 @@
 
 All notable changes to this project are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.0.5] – 2026-11-12
+
+### Changed
+
+- Performance with large tables (measured with one million items):
+  - Checks whether any files or queued deletions exist (settings page, endpoint check on save) and whether an operation has anything to do stop at the first row (`LIMIT 1`) instead of counting the whole table.
+  - The statistics and "pending" counters of the tools tab are cached. The plugin drops the cache whenever it changes items, settings or attachments; the lifetime (filter `bms3o_count_cache_ttl`, default 5 minutes, 0 disables it) only matters for changes made outside the plugin.
+  - New index `(source_type, local_removed, source_id)` (schema version 4). Bulk batches for "Remove local copies" and "Restore local copies" no longer scan the table when few or no files match (642 ms → 0.1 ms per batch without matches).
+- The tools tab and `wp bm-s3 status` count the cleanup queue in the database instead of loading it.
+
 ## [1.0.4] – 2026-11-12
 
 ### Fixed

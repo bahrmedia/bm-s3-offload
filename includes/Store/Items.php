@@ -27,7 +27,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Items {
 
-	const DB_VERSION  = '3';
+	const DB_VERSION  = '4';
 	const CACHE_GROUP = 'bms3o_items';
 	const SOURCE_POST = 'attachment';
 	const NOT_FOUND   = 0;
@@ -78,7 +78,8 @@ final class Items {
   PRIMARY KEY  (id),
   UNIQUE KEY path_hash (path_hash),
   KEY path (path(191)),
-  KEY source (source_type,source_id)
+  KEY source (source_type,source_id),
+  KEY source_local (source_type,local_removed,source_id)
 ) {$collate};"
 		);
 
@@ -299,6 +300,17 @@ final class Items {
 	}
 
 	/**
+	 * Whether there is at least one item (independent of the table size).
+	 *
+	 * @return bool
+	 */
+	public function has_any() {
+		global $wpdb;
+		$table = self::table();
+		return null !== $wpdb->get_var( "SELECT id FROM {$table} LIMIT 1" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery
+	}
+
+	/**
 	 * Inserts or updates an item (identified by its path).
 	 *
 	 * @param array $item Item data.
@@ -345,6 +357,7 @@ final class Items {
 		// phpcs:enable
 
 		$this->forget( array( $row['path'] ) );
+		Counts::flush();
 		return false !== $written;
 	}
 
@@ -368,6 +381,7 @@ final class Items {
 			$wpdb->query( $wpdb->prepare( "UPDATE {$table} SET local_removed = %d WHERE path_hash IN ({$placeholders})", array_merge( array( $removed ? 1 : 0 ), array_map( 'md5', $chunk ) ) ) );
 		}
 		$this->forget( $paths );
+		Counts::flush();
 	}
 
 	/**
@@ -389,6 +403,7 @@ final class Items {
 			$wpdb->query( $wpdb->prepare( "DELETE FROM {$table} WHERE path_hash IN ({$placeholders})", array_map( 'md5', $chunk ) ) );
 		}
 		$this->forget( $paths );
+		Counts::flush();
 	}
 
 	/**

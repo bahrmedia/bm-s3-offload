@@ -64,6 +64,20 @@ final class Bulk {
 	}
 
 	/**
+	 * Whether an operation has anything to do. Stops at the first match, so
+	 * unlike remaining() it does not depend on the size of the table.
+	 *
+	 * @param string $operation Operation.
+	 * @return bool
+	 */
+	public function has_pending( $operation ) {
+		if ( 'bb_sync' === $operation ) {
+			return 0 !== $this->remaining( $operation );
+		}
+		return ! empty( $this->ids( $operation, 0, 1 ) );
+	}
+
+	/**
 	 * Processes one batch.
 	 *
 	 * @param string $operation Operation.

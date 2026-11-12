@@ -13,6 +13,7 @@ use BahrMedia\S3Offload\Integrations\BuddyBoss;
 use BahrMedia\S3Offload\Integrations\WooCommerce;
 use BahrMedia\S3Offload\Media\Attachments;
 use BahrMedia\S3Offload\Media\ContentRewriter;
+use BahrMedia\S3Offload\Store\Counts;
 use BahrMedia\S3Offload\Store\Items;
 
 defined( 'ABSPATH' ) || exit;
@@ -100,6 +101,8 @@ final class Plugin {
 		$this->attachments = new Attachments( $this->offloader );
 		add_action( self::CRON_HOOK, array( $this->offloader, 'process_orphans' ), 10, 0 );
 		add_action( 'bms3o_storage_changed', array( $this->offloader, 'move_orphans' ), 10, 2 );
+		add_action( 'add_attachment', array( Counts::class, 'flush' ), 10, 0 );
+		add_action( 'delete_attachment', array( Counts::class, 'flush' ), 10, 0 );
 		$this->attachments->register();
 		( new ContentRewriter( $this->offloader ) )->register();
 		( new Assets( $this->settings ) )->register();

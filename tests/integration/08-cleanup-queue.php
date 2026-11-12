@@ -103,7 +103,7 @@ bms3o_t_section( 'Queued deletions block a change of storage' );
 
 // Simulate a site whose last offloaded file was deleted: no items, only queued objects.
 $no_items = static function ( $query ) {
-	return 'SELECT COUNT(*) FROM ' . Items::table() === trim( $query ) ? 'SELECT 0' : $query;
+	return 'SELECT id FROM ' . Items::table() . ' LIMIT 1' === trim( $query ) ? 'SELECT NULL FROM DUAL WHERE 0' : $query;
 };
 $endpoint = $settings->get( 'endpoint' );
 $input    = array( 'endpoint' => 'http://storage.invalid:9000' ) + array_map( 'strval', $settings->all() );

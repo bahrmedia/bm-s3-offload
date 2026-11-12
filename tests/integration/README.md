@@ -15,6 +15,7 @@ Platform and WooCommerce, MinIO as S3 server.
 | `06-woocommerce.php` | Downloadable products: order → signed redirect → correct file |
 | `08-cleanup-queue.php` | Cleanup queue: entries added during a run, storage identity, storage change guard, rotation of failing entries, re-upload reports a reachable public copy, no deletion of an object written again during the cleanup, migration of the 1.0.3 queue, locks with owner |
 | `07-robustness.php` | Failed deletions (privacy change, deleted media) and cleanup, failed database writes, size check before removing local copies, storage change guard, retries, multipart copy, uninstall guard |
+| `09-counters.php` | Index for the pending counters (incl. upgrade from schema 3), existence checks with `LIMIT 1`, `has_pending()` against `remaining()`, counter cache: invalidation by items, attachments and settings, lifetime filter, tools tab |
 
 ## Running locally
 

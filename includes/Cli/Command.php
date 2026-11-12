@@ -66,7 +66,7 @@ final class Command {
 			'private'         => $stats['private'],
 			'pending_offload' => $this->plugin->bulk->remaining( 'offload' ),
 			'pending_retries' => count( $this->plugin->attachments->pending_retries() ),
-			'pending_cleanup' => count( $this->plugin->offloader->orphans() ),
+			'pending_cleanup' => $this->plugin->offloader->orphan_store()->count(),
 			'failing_cleanup' => $this->plugin->offloader->failing_orphans(),
 			'storage'         => '' === $settings->storage_error() ? 'ok' : 'changed – see "wp bm-s3 storage"',
 		);

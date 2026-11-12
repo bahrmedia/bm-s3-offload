@@ -213,6 +213,7 @@ output → wp_get_attachment_url / image_downsize / srcset / content filters
 | `bms3o_bulk_batch_size` | filter | Items per batch of a bulk operation in the browser |
 | `bms3o_bulk_time_limit` | filter | Time budget of a browser bulk request in seconds (default 20, at most half of `max_execution_time`) |
 | `bms3o_uploaded` | action | After a file has been uploaded |
+| `bms3o_count_cache_ttl` | filter | Lifetime of the cached counters of the tools tab in seconds (default 300, 0 disables the cache) |
 | `bms3o_object_lock_wait` | filter | Seconds an upload or privacy change waits for the cleanup of the same object (default 10) |
 | `bms3o_storage_changed` | action | After a confirmed change of storage (previous and new storage identity) |
 

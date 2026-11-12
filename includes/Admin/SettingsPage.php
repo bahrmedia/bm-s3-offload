@@ -11,6 +11,7 @@ use BahrMedia\S3Offload\Bulk;
 use BahrMedia\S3Offload\Integrations\BuddyBoss;
 use BahrMedia\S3Offload\Plugin;
 use BahrMedia\S3Offload\Providers;
+use BahrMedia\S3Offload\Store\Counts;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -400,7 +401,7 @@ final class SettingsPage {
 	 * @return void
 	 */
 	private function render_storage_moved() {
-		if ( 0 === $this->plugin->offloader->items()->count() ) {
+		if ( ! $this->plugin->offloader->items()->has_any() ) {
 			return;
 		}
 		?>
@@ -433,10 +434,10 @@ final class SettingsPage {
 		// Existing BuddyBoss objects become private automatically (in the background). The other
 		// direction makes member media public and is only done on request (tools tab).
 		$now_private = (bool) $this->plugin->settings->get( 'bb_private' );
-		if ( $now_private && ! $was_private && $this->plugin->bulk->remaining( 'sync_privacy' ) > 0 && ! $this->plugin->background->start( 'sync_privacy' ) ) {
+		if ( $now_private && ! $was_private && $this->plugin->bulk->has_pending( 'sync_privacy' ) && ! $this->plugin->background->start( 'sync_privacy' ) ) {
 			$errors[] = __( 'Existing BuddyBoss media could not be made private yet because another background operation is running. Start "Apply BuddyBoss privacy setting" in the tools tab afterwards.', 'bm-s3-offload' );
 		}
-		if ( ! $now_private && $was_private && $this->plugin->bulk->remaining( 'sync_privacy' ) > 0 ) {
+		if ( ! $now_private && $was_private && $this->plugin->bulk->has_pending( 'sync_privacy' ) ) {
 			$errors[] = __( 'Existing BuddyBoss media stay private until you run "Apply BuddyBoss privacy setting" in the tools tab. That makes them publicly readable for anyone who knows the address.', 'bm-s3-offload' );
 		}
 		if ( ! empty( $errors ) ) {
@@ -460,7 +461,13 @@ final class SettingsPage {
 	 */
 	private function render_tools() {
 		$settings = $this->plugin->settings;
-		$stats    = $this->plugin->offloader->items()->stats();
+		$items    = $this->plugin->offloader->items();
+		$stats    = Counts::get(
+			'stats',
+			static function () use ( $items ) {
+				return $items->stats();
+			}
+		);
 		$retries  = count( $this->plugin->attachments->pending_retries() );
 		?>
 		<h2><?php esc_html_e( 'Status', 'bm-s3-offload' ); ?></h2>
@@ -471,7 +478,7 @@ final class SettingsPage {
 				<tr><th><?php esc_html_e( 'Without local copy', 'bm-s3-offload' ); ?></th><td><?php echo esc_html( number_format_i18n( $stats['local_removed'] ) ); ?></td></tr>
 				<tr><th><?php esc_html_e( 'Private files', 'bm-s3-offload' ); ?></th><td><?php echo esc_html( number_format_i18n( $stats['private'] ) ); ?></td></tr>
 				<tr><th><?php esc_html_e( 'Waiting for retry', 'bm-s3-offload' ); ?></th><td><?php echo esc_html( number_format_i18n( $retries ) ); ?></td></tr>
-				<tr><th><?php esc_html_e( 'Waiting for cleanup', 'bm-s3-offload' ); ?></th><td><?php echo esc_html( number_format_i18n( count( $this->plugin->offloader->orphans() ) ) ); ?></td></tr>
+				<tr><th><?php esc_html_e( 'Waiting for cleanup', 'bm-s3-offload' ); ?></th><td><?php echo esc_html( number_format_i18n( $this->plugin->offloader->orphan_store()->count() ) ); ?></td></tr>
 			</tbody>
 		</table>
 
@@ -493,7 +500,7 @@ final class SettingsPage {
 			$this->bulk_card( 'offload', __( 'Offload existing media', 'bm-s3-offload' ), __( 'Uploads all media that are not in the bucket yet.', 'bm-s3-offload' ), true );
 			$this->bulk_card( 'remove_local', __( 'Remove local copies', 'bm-s3-offload' ), __( 'Deletes local copies of offloaded media after verifying each object in the bucket.', 'bm-s3-offload' ) );
 			$this->bulk_card( 'download', __( 'Restore local copies', 'bm-s3-offload' ), __( 'Downloads all files that only exist in the bucket back to this server.', 'bm-s3-offload' ) );
-			if ( $this->plugin->bulk->remaining( 'sync_privacy' ) > 0 ) {
+			if ( $this->plugin->bulk->has_pending( 'sync_privacy' ) ) {
 				$this->bulk_card( 'sync_privacy', __( 'Apply BuddyBoss privacy setting', 'bm-s3-offload' ), __( 'Moves existing BuddyBoss media to the private or public area according to the "private media" setting.', 'bm-s3-offload' ) );
 			}
 			if ( BuddyBoss::is_active() ) {
@@ -520,7 +527,13 @@ final class SettingsPage {
 	 * @return void
 	 */
 	private function bulk_card( $operation, $title, $description, $remove_local = false, $danger = false ) {
-		$remaining  = $this->plugin->bulk->remaining( $operation );
+		$bulk       = $this->plugin->bulk;
+		$remaining  = 'bb_sync' === $operation ? $bulk->remaining( $operation ) : (int) Counts::get(
+			'remaining_' . $operation,
+			static function () use ( $bulk, $operation ) {
+				return $bulk->remaining( $operation );
+			}
+		);
 		$configured = $this->plugin->settings->is_configured();
 		$unknown    = $remaining < 0;
 		?>

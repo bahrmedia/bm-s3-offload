@@ -142,6 +142,17 @@ final class Orphans {
 	}
 
 	/**
+	 * Whether the queue has entries (independent of its size).
+	 *
+	 * @return bool
+	 */
+	public function has_any() {
+		global $wpdb;
+		$table = self::table();
+		return null !== $wpdb->get_var( "SELECT id FROM {$table} LIMIT 1" ); // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.DirectDatabaseQuery
+	}
+
+	/**
 	 * Entries that are due on a storage (entries without storage belong to any).
 	 *
 	 * @param string $storage Storage identity.

@@ -8,6 +8,7 @@
 namespace BahrMedia\S3Offload;
 
 use BahrMedia\S3Offload\S3\Client;
+use BahrMedia\S3Offload\Store\Counts;
 use BahrMedia\S3Offload\Store\Items;
 use BahrMedia\S3Offload\Store\Orphans;
 
@@ -224,6 +225,7 @@ final class Settings {
 		}
 
 		update_option( self::OPTION, $stored, true );
+		Counts::flush(); // The pending BuddyBoss privacy changes depend on the settings.
 		$this->flush();
 		return $errors;
 	}
@@ -292,7 +294,7 @@ final class Settings {
 	 * @return bool
 	 */
 	private static function has_items() {
-		return ( new Orphans() )->count() > 0 || ( new Items() )->count() > 0;
+		return ( new Items() )->has_any() || ( new Orphans() )->has_any();
 	}
 
 	/**
