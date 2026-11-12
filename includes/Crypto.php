@@ -42,7 +42,7 @@ final class Crypto {
 			$nonce  = random_bytes( SODIUM_CRYPTO_SECRETBOX_NONCEBYTES );
 			$cipher = sodium_crypto_secretbox( $plain, $nonce, self::key() );
 		} catch ( \Exception $e ) {
-			throw new \RuntimeException( 'Encryption failed.', 0, $e );
+			throw new \RuntimeException( 'Encryption failed: ' . esc_html( $e->getMessage() ) );
 		}
 
 		// phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Binary-safe storage.
