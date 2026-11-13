@@ -20,3 +20,24 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "$GITHUB_REF_NAME" build/bm-s3-offload.zip --title "$GITHUB_REF_NAME" --notes "See CHANGELOG.md"
+
+  # Publishes the tagged version to the WordPress.org plugin directory (SVN trunk,
+  # tags/<version>, directory assets from .wordpress-org/). Skipped until the
+  # repository secrets SVN_USERNAME and SVN_PASSWORD are set.
+  wordpress-org:
+    needs: zip
+    runs-on: ubuntu-latest
+    env:
+      SVN_USERNAME: ${{ secrets.SVN_USERNAME }}
+      SVN_PASSWORD: ${{ secrets.SVN_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        if: env.SVN_USERNAME != ''
+      - name: Deploy to WordPress.org
+        if: env.SVN_USERNAME != ''
+        uses: 10up/action-wordpress-plugin-deploy@2.3.0
+        env:
+          SLUG: bm-s3-offload
+      - name: No WordPress.org credentials
+        if: env.SVN_USERNAME == ''
+        run: echo "SVN_USERNAME/SVN_PASSWORD are not set – WordPress.org deployment skipped."

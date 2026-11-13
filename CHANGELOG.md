@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.0.13] – 2026-11-13
+
+Preparation for the WordPress.org plugin directory; no functional changes.
+
+### Added
+
+- `readme.txt`: sections *External services* (which data is sent to the configured S3 storage and when; terms and privacy policies of the provider presets) and *Screenshots*.
+- Screenshots for the plugin directory in `.wordpress-org/` (not part of the plugin ZIP).
+- Release workflow: job `wordpress-org` publishes tagged versions to the plugin directory's SVN repository (`10up/action-wordpress-plugin-deploy`). It is skipped until the repository secrets `SVN_USERNAME` and `SVN_PASSWORD` are set.
+
+### Changed
+
+- Plugin Check: exceptions of the S3 client are annotated – their messages are not output where they are thrown and are escaped where they are displayed.
+
 ## [1.0.12] – 2026-11-13
 
 ### Fixed

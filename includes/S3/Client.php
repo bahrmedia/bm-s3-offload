@@ -212,7 +212,7 @@ class Client {
 	 */
 	public function put_file( $key, $file, array $headers = array() ) {
 		if ( ! is_readable( $file ) ) {
-			throw new S3Exception( sprintf( 'File not readable: %s', $file ) );
+			throw new S3Exception( sprintf( 'File not readable: %s', $file ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not output here; messages are escaped where they are displayed.
 		}
 
 		$size = filesize( $file );
@@ -224,7 +224,7 @@ class Client {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- Local file, binary safe read.
 		$body = file_get_contents( $file );
 		if ( false === $body ) {
-			throw new S3Exception( sprintf( 'File not readable: %s', $file ) );
+			throw new S3Exception( sprintf( 'File not readable: %s', $file ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not output here; messages are escaped where they are displayed.
 		}
 		$this->put_string( $key, $body, $headers );
 	}
@@ -278,7 +278,7 @@ class Client {
 	public function get_to_file( $key, $destination ) {
 		$dir = dirname( $destination );
 		if ( ! wp_mkdir_p( $dir ) ) {
-			throw new S3Exception( sprintf( 'Cannot create directory: %s', $dir ) );
+			throw new S3Exception( sprintf( 'Cannot create directory: %s', $dir ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not output here; messages are escaped where they are displayed.
 		}
 
 		$tmp = $destination . '.bms3o-' . wp_generate_password( 8, false ) . '.part';
@@ -292,7 +292,7 @@ class Client {
 		// phpcs:ignore WordPress.WP.AlternativeFunctions.rename_rename -- Atomic move within the same directory.
 		if ( ! rename( $tmp, $destination ) ) {
 			wp_delete_file( $tmp );
-			throw new S3Exception( sprintf( 'Cannot write file: %s', $destination ) );
+			throw new S3Exception( sprintf( 'Cannot write file: %s', $destination ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not output here; messages are escaped where they are displayed.
 		}
 	}
 
@@ -337,7 +337,7 @@ class Client {
 		// S3 may answer 200 OK with an error document for this operation.
 		$doc = self::parse_xml( $response['body'] );
 		if ( $doc && 'Error' === $doc->getName() ) {
-			throw new S3Exception( self::text( $doc, 'Message' ), 500, self::text( $doc, 'Code' ) );
+			throw new S3Exception( self::text( $doc, 'Message' ), 500, self::text( $doc, 'Code' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not output here; messages are escaped where they are displayed.
 		}
 	}
 
@@ -568,7 +568,7 @@ class Client {
 		$handle = fopen( $file, 'rb' );
 		if ( ! $handle ) {
 			$this->abort_multipart( $key, $upload_id );
-			throw new S3Exception( sprintf( 'File not readable: %s', $file ) );
+			throw new S3Exception( sprintf( 'File not readable: %s', $file ) ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not output here; messages are escaped where they are displayed.
 		}
 
 		$parts = array();
@@ -860,7 +860,7 @@ class Client {
 
 		$response = wp_remote_request( $url, $args );
 		if ( is_wp_error( $response ) ) {
-			throw new S3Exception( $response->get_error_message() );
+			throw new S3Exception( $response->get_error_message() ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not output here; messages are escaped where they are displayed.
 		}
 
 		$status       = (int) wp_remote_retrieve_response_code( $response );
@@ -884,7 +884,7 @@ class Client {
 				$code    = self::text( $doc, 'Code' );
 				$message = trim( $code . ': ' . self::text( $doc, 'Message' ), ': ' );
 			}
-			throw new S3Exception( $message, $status, $code );
+			throw new S3Exception( $message, $status, $code ); // phpcs:ignore WordPress.Security.EscapeOutput.ExceptionNotEscaped -- Not output here; messages are escaped where they are displayed.
 		}
 
 		return array(

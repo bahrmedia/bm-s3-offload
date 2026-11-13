@@ -11,3 +11,4 @@
 /CHANGELOG.md     export-ignore
 /README.md        export-ignore
 /tests            export-ignore
+/.wordpress-org   export-ignore

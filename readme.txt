@@ -4,7 +4,7 @@ Tags: s3, offload, buddyboss, woocommerce, cdn
 Requires at least: 6.2
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 1.0.12
+Stable tag: 1.0.13
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -77,7 +77,43 @@ No. URLs in the database stay local and are rewritten on output, so you can deac
 
 s3:PutObject, s3:GetObject, s3:DeleteObject, s3:ListBucket and the multipart upload permissions on the bucket.
 
+== Screenshots ==
+
+1. Storage settings: provider presets for common S3-compatible services, endpoint, bucket and encrypted credentials.
+2. Tools: connection test, bulk offload of existing media and status counters.
+3. Media library: offload status column, filter and row actions (offload, private/public, leave the bucket).
+
+== External services ==
+
+This plugin connects to the S3-compatible object storage that you configure in its settings. It has no service of its own and sends no data to the plugin author or any other third party.
+
+What is sent and when:
+
+* When a file is uploaded to the media library (and during a bulk offload you start), the file and its image sizes are uploaded to your bucket together with their path, content type and cache headers.
+* When files are made private or public, deleted, moved back or verified, the plugin sends the corresponding requests (copy, delete, read, list) for these files to your bucket.
+* The connection test in the Tools tab uploads two small test files (public and private), reads them, checks their URLs and deletes them again.
+* Visitors' browsers load offloaded files directly from the bucket or from the CDN domain you configure. For private files the plugin hands out expiring signed URLs.
+* If you enter a CDN domain for scripts and styles, visitors' browsers load theme, plugin and core scripts and styles from that domain.
+* Every request is signed with the access key you entered; the secret key itself is never transmitted.
+
+Which company processes the data depends on the storage you choose. Terms of service and privacy policies of the providers offered as presets:
+
+* Amazon S3 (Amazon Web Services): [Terms](https://aws.amazon.com/service-terms/), [Privacy](https://aws.amazon.com/privacy/)
+* Cloudflare R2: [Terms](https://www.cloudflare.com/terms/), [Privacy](https://www.cloudflare.com/privacypolicy/)
+* Wasabi: [Terms](https://wasabi.com/legal/customer-agreement), [Privacy](https://wasabi.com/legal/privacy-policy)
+* Backblaze B2: [Terms](https://www.backblaze.com/company/policy/terms-of-service), [Privacy](https://www.backblaze.com/company/policy/privacy)
+* DigitalOcean Spaces: [Terms](https://www.digitalocean.com/legal/terms-of-service-agreement), [Privacy](https://www.digitalocean.com/legal/privacy-policy)
+* Hetzner Object Storage: [Terms](https://www.hetzner.com/legal/terms-and-conditions), [Privacy](https://www.hetzner.com/legal/privacy-policy)
+* IONOS S3 Object Storage: [Terms](https://www.ionos.com/terms-gtc/), [Privacy](https://www.ionos.com/terms-gtc/privacy-policy/)
+* Scaleway Object Storage: [Terms](https://www.scaleway.com/en/contracts/), [Privacy](https://www.scaleway.com/en/privacy-policy/)
+
+With MinIO or another self-hosted storage, the data stays on servers you operate. For any other S3-compatible service, the terms and privacy policy of that service apply.
+
 == Changelog ==
+
+= 1.0.13 =
+* Readme: new sections "External services" (what is sent to the configured storage, terms and privacy policies of the provider presets) and "Screenshots" for the WordPress.org plugin directory.
+* Releases are also published to the WordPress.org plugin directory once its credentials are configured.
 
 = 1.0.12 =
 * Fixed: making a translation private while the handover of its shared files was pending changed nothing. The handover is completed first, or the operation is refused with a message.
