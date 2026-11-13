@@ -49,7 +49,12 @@ $threshold = static function () {
 	return 2560; // WordPress' default; some optimisers (e.g. EWWW) switch the scaling off.
 };
 add_filter( 'big_image_size_threshold', $threshold, 999 );
+// EWWW resizes large uploads itself (default 2560 px) before WordPress can scale them.
+add_filter( 'pre_option_ewww_image_optimizer_maxmediawidth', '__return_zero' );
+add_filter( 'pre_option_ewww_image_optimizer_maxmediaheight', '__return_zero' );
 $id = bms3o_t_import( bms3o_t_image( 3000, 2000, $name ) );
+remove_filter( 'pre_option_ewww_image_optimizer_maxmediawidth', '__return_zero' );
+remove_filter( 'pre_option_ewww_image_optimizer_maxmediaheight', '__return_zero' );
 remove_filter( 'big_image_size_threshold', $threshold, 999 );
 $paths = $media->paths( $id );
 $items = $offloader->items()->get_by_source( 'attachment', $id );

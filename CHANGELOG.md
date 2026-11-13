@@ -15,6 +15,7 @@ Preparation for the WordPress.org plugin directory; no functional changes.
 ### Changed
 
 - Plugin Check: exceptions of the S3 client are annotated – their messages are not output where they are thrown and are escaped where they are displayed.
+- Tests: `02-attachments.php` switches off EWWW's own resizing of large uploads while it checks WordPress' scaling.
 
 ## [1.0.12] – 2026-11-13
 
