@@ -132,7 +132,7 @@ function bms3o_t_fail_handover( $query ) {
 
 bms3o_t_section( 'Failed handover' );
 
-delete_option( 'bms3o_handover' );
+bms3o_t_clear_lists();
 list( $original, $copy ) = bms3o_t_shared_copy( 'shared-handover.png' );
 $paths                   = $media->paths( $original );
 $keys                    = wp_list_pluck( $offloader->items()->get_many( $paths ), 'object_key' );
@@ -154,7 +154,7 @@ bms3o_t( ! in_array( $copy, $media->pending_retries(), true ), 'Until then, savi
 $media->retry_handovers();
 $offloader->items()->forget( $paths );
 $owners = array_values( array_unique( array_map( 'intval', wp_list_pluck( $offloader->items()->get_many( $paths ), 'source_id' ) ) ) );
-bms3o_t( array( $copy ) === $owners && 0 === $media->pending_handovers(), 'The hourly retry hands the items over', array( $owners, $copy, get_option( 'bms3o_handover' ) ) );
+bms3o_t( array( $copy ) === $owners && 0 === $media->pending_handovers(), 'The hourly retry hands the items over', array( $owners, $copy, $media->pending_handovers() ) );
 wp_delete_attachment( $copy, true );
 $exists = array_filter( array_map( 'bms3o_t_object_exists', $keys ) );
 bms3o_t( empty( $exists ), 'Deleting the remaining attachment then deletes the objects' );
@@ -205,6 +205,59 @@ $media->sync_privacy( $copy );
 $offloader->items()->forget( array( $file ) );
 bms3o_t( $offloader->items()->get( $file )['is_private'] && '1' === get_post_meta( $copy, '_bms3o_private', true ), 'The attachment taking over private files is marked private' );
 wp_delete_attachment( $copy, true );
+
+bms3o_t_section( 'Operations on the remaining attachment while a handover is pending' );
+
+// The pending handover is completed first, then the operation runs.
+list( $original, $copy ) = bms3o_t_shared_copy( 'shared-pending.png' );
+$file                    = get_post_meta( $original, '_wp_attached_file', true );
+$paths                   = $media->paths( $original );
+add_filter( 'query', 'bms3o_t_fail_handover' );
+wp_delete_attachment( $original, true );
+remove_filter( 'query', 'bms3o_t_fail_handover' );
+bms3o_t( $media->pending_handovers() > 0, 'The handover is pending' );
+$library = new \BahrMedia\S3Offload\Admin\MediaLibrary( $plugin );
+$actions = new ReflectionMethod( $library, 'applicable' );
+$actions->setAccessible( true );
+bms3o_t( in_array( 'make_private', $actions->invoke( $library, $copy ), true ), 'The media library offers the actions for the offloaded files', $actions->invoke( $library, $copy ) );
+$errors = $media->set_privacy( $copy, true );
+$offloader->items()->forget( $paths );
+$item = $offloader->items()->get( $file );
+$url  = wp_get_attachment_url( $copy );
+bms3o_t( empty( $errors ) && $item['is_private'] && $copy === (int) $item['source_id'] && 0 === $media->pending_handovers(), 'Make private completes the handover and moves the objects', array( $errors, $item ) );
+bms3o_t( false !== strpos( $url, 'X-Amz-Signature' ) && 200 === bms3o_t_status( $url ), 'The remaining attachment gets a signed URL', $url );
+wp_delete_attachment( $copy, true );
+
+// The handover fails again: the operations are refused instead of reporting success.
+list( $original, $copy ) = bms3o_t_shared_copy( 'shared-pending-2.png' );
+$file                    = get_post_meta( $original, '_wp_attached_file', true );
+$paths                   = $media->paths( $original );
+add_filter( 'query', 'bms3o_t_fail_handover' );
+wp_delete_attachment( $original, true );
+$private   = $media->set_privacy( $copy, true );
+$unoffload = $media->unoffload( $copy );
+remove_filter( 'query', 'bms3o_t_fail_handover' );
+$offloader->items()->forget( $paths );
+$item = $offloader->items()->get( $file );
+bms3o_t( isset( $private[ $file ] ) && ! $item['is_private'] && '1' !== get_post_meta( $copy, '_bms3o_private', true ), 'Make private is refused with a message and changes nothing', $private );
+bms3o_t( isset( $unoffload[ $file ] ) && $item && bms3o_t_object_exists( $item['object_key'] ), '"Leave the bucket" is refused with a message and changes nothing', $unoffload );
+$media->retry_handovers();
+wp_delete_attachment( $copy, true );
+
+bms3o_t_section( '"Leave the bucket" on the second attachment' );
+
+list( $original, $copy ) = bms3o_t_shared_copy( 'shared-unoffload.png' );
+$file                    = get_post_meta( $original, '_wp_attached_file', true );
+$paths                   = $media->paths( $original );
+$keys                    = wp_list_pluck( $offloader->items()->get_many( $paths ), 'object_key' );
+$offloader->remove_local( $paths, true );
+$errors = $media->unoffload( $copy );
+$offloader->items()->forget( $paths );
+bms3o_t( empty( $errors ) && is_file( $offloader->absolute( $file ) ) && empty( $offloader->items()->get_many( $paths ) ), 'The shared files are downloaded and their items removed', $errors );
+bms3o_t( empty( array_filter( array_map( 'bms3o_t_object_exists', $keys ) ) ), 'The objects are deleted' );
+bms3o_t( 0 === strpos( wp_get_attachment_url( $original ), home_url() ) && 0 === strpos( wp_get_attachment_url( $copy ), home_url() ), 'Both attachments are served locally' );
+wp_delete_attachment( $copy, true );
+wp_delete_attachment( $original, true );
 
 bms3o_t_section( 'Polylang media translations' );
 

@@ -27,7 +27,7 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Items {
 
-	const DB_VERSION  = '5';
+	const DB_VERSION  = '6';
 	const CACHE_GROUP = 'bms3o_items';
 	const SOURCE_POST = 'attachment';
 	const NOT_FOUND   = 0;
@@ -83,9 +83,9 @@ final class Items {
 ) {$collate};"
 		);
 
-		// Without a complete migration of the cleanup queue the version stays, so the
-		// next request tries again (the legacy queue is kept until then).
-		if ( Orphans::install() ) {
+		// Without a complete migration of the cleanup queue and the retry lists the version
+		// stays, so the next request tries again (the legacy options are kept until then).
+		if ( Orphans::install() && \BahrMedia\S3Offload\Media\Attachments::migrate_lists() ) {
 			update_option( 'bms3o_db_version', self::DB_VERSION, true );
 		}
 	}

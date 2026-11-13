@@ -244,3 +244,13 @@ function bms3o_t_user( $login, $role = 'subscriber' ) {
 function bms3o_t_object_exists( $key ) {
 	return null !== bms3o_t_plugin()->settings->client()->head( $key );
 }
+
+/**
+ * Empties the retry list and the list of pending handovers.
+ *
+ * @return void
+ */
+function bms3o_t_clear_lists() {
+	( new \BahrMedia\S3Offload\Store\Entries( \BahrMedia\S3Offload\Media\Attachments::RETRY_PREFIX ) )->clear();
+	( new \BahrMedia\S3Offload\Store\Entries( \BahrMedia\S3Offload\Media\Attachments::HANDOVER_PREFIX ) )->clear();
+}

@@ -2,6 +2,15 @@
 
 All notable changes to this project are documented in this file. The format follows [Keep a Changelog](https://keepachangelog.com/) and the project uses [Semantic Versioning](https://semver.org/).
 
+## [1.0.12] – 2026-11-13
+
+### Fixed
+
+- While the handover of shared files to the remaining attachment was pending (after it failed, see 1.0.10), *Make private* / *Make public* on that attachment reported success but moved no object. Pending handovers of the file are now completed first; if that fails again, the operation is refused with a message.
+- *Leave the bucket* on a translation of an attachment (media translations sharing the file) did nothing and reported success. It now works on the files of all attachments sharing the main file, with the same handover check.
+- The media library offered only *Offload* for translations, as their files belong to the attachment that uploaded them. The actions now consider all attachments sharing the file.
+- The retry lists could still lose entries when the lock of 1.0.11 could not be acquired within 5 seconds (the change was made anyway). The lists no longer use a lock: every entry is a row of its own in the options table (`bms3o_retry_entry_<ID>`, `bms3o_handover_entry_<md5 file>_<md5 path>`), added, changed and removed with single statements. The lists of 1.0.10/1.0.11 are migrated on upgrade (schema version 6).
+
 ## [1.0.11] – 2026-11-12
 
 ### Fixed

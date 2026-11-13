@@ -127,13 +127,12 @@ final class Lock {
 	}
 
 	/**
-	 * Drops cached values of the option (including the "does not exist" cache),
-	 * so that the next get_option() reads the database.
+	 * Drops cached values of the option (including the "does not exist" cache).
 	 *
 	 * @param string $name Option name.
 	 * @return void
 	 */
-	public static function flush_cache( $name ) {
+	private static function flush_cache( $name ) {
 		wp_cache_delete( $name, 'options' );
 		$notoptions = wp_cache_get( 'notoptions', 'options' );
 		if ( is_array( $notoptions ) && isset( $notoptions[ $name ] ) ) {

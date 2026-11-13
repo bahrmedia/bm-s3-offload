@@ -53,6 +53,9 @@ function bms3o_uninstall_site() {
 	delete_option( 'bms3o_handover' );
 	delete_option( 'bms3o_retry_lock' );
 	delete_option( 'bms3o_handover_lock' );
+	foreach ( array( 'bms3o_retry_entry_', 'bms3o_handover_entry_' ) as $prefix ) {
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s", $wpdb->esc_like( $prefix ) . '%' ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+	}
 	delete_option( 'bms3o_background' );
 	delete_option( 'bms3o_background_lock' );
 	delete_option( 'bms3o_orphans_lock' );

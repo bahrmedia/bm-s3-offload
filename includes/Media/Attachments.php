@@ -9,8 +9,8 @@ namespace BahrMedia\S3Offload\Media;
 
 use BahrMedia\S3Offload\Integrations\BuddyBoss;
 use BahrMedia\S3Offload\Integrations\WooCommerce;
-use BahrMedia\S3Offload\Lock;
 use BahrMedia\S3Offload\Offloader;
+use BahrMedia\S3Offload\Store\Entries;
 use BahrMedia\S3Offload\Store\Items;
 
 defined( 'ABSPATH' ) || exit;
@@ -21,13 +21,22 @@ defined( 'ABSPATH' ) || exit;
  */
 final class Attachments {
 
-	const RETRY_OPTION = 'bms3o_retry';
+	/**
+	 * Option name prefix of the retry entries (one row per attachment, value: attempts).
+	 */
+	const RETRY_PREFIX = 'bms3o_retry_entry_';
 
 	/**
-	 * Option: shared files whose items could not be handed over to the
-	 * remaining attachment (path => main file), retried hourly.
+	 * Option name prefix of pending handovers: shared files whose items could
+	 * not be handed over to the remaining attachment, retried hourly. One row
+	 * per path, key md5(main file) . '_' . md5(path), value array(path, main file).
 	 */
-	const HANDOVER_OPTION = 'bms3o_handover';
+	const HANDOVER_PREFIX = 'bms3o_handover_entry_';
+
+	/**
+	 * Options of the lists up to 1.0.11 (migrated on upgrade), and their locks.
+	 */
+	const LEGACY_LISTS = array( 'bms3o_retry', 'bms3o_handover', 'bms3o_retry_lock', 'bms3o_handover_lock' );
 
 	/**
 	 * Cron hook that offloads large attachments after the upload request.
@@ -59,6 +68,20 @@ final class Attachments {
 	 */
 	const META_PRIVATE = '_bms3o_private';
 	const MAX_ATTEMPTS = 5;
+
+	/**
+	 * Retry list (lazy).
+	 *
+	 * @var Entries|null
+	 */
+	private $retries = null;
+
+	/**
+	 * List of pending handovers (lazy).
+	 *
+	 * @var Entries|null
+	 */
+	private $handovers = null;
 
 	/**
 	 * Offloader.
@@ -395,6 +418,10 @@ final class Attachments {
 			return array( $file => __( 'Files in protected directories (BuddyBoss, WooCommerce, Easy Digital Downloads) cannot be made public.', 'bm-s3-offload' ) );
 		}
 
+		if ( ! $this->complete_handover( (int) $attachment_id ) ) {
+			return array( $file => self::handover_pending_message() );
+		}
+
 		// Attachments that share the file (media translations) share its privacy: the
 		// objects belong to one of them, the state is stored for all of them.
 		$group  = array_merge( array( (int) $attachment_id ), $this->sharing_attachments( (int) $attachment_id ) );
@@ -415,6 +442,24 @@ final class Attachments {
 			}
 		}
 		return $errors;
+	}
+
+	/**
+	 * Items of the files of an attachment, whichever attachment of the group
+	 * sharing the main file (media translations) uploaded them.
+	 *
+	 * @param int $attachment_id Attachment ID.
+	 * @return array<string,array> Items by path.
+	 */
+	public function items_of( $attachment_id ) {
+		$items = $this->group_items( array_merge( array( (int) $attachment_id ), $this->sharing_attachments( (int) $attachment_id ) ) );
+		$paths = array();
+		foreach ( $this->handovers()->all( 5000, md5( (string) get_post_meta( (int) $attachment_id, '_wp_attached_file', true ) ) . '_' ) as $entry ) {
+			if ( is_array( $entry ) && isset( $entry[0] ) ) {
+				$paths[] = (string) $entry[0]; // Still owned by a deleted attachment.
+			}
+		}
+		return empty( $paths ) ? $items : $items + $this->offloader->items()->get_many( $paths );
 	}
 
 	/**
@@ -500,17 +545,17 @@ final class Attachments {
 	 */
 	private function own_paths( $attachment_id, array $paths ) {
 		$sharing = null;
-		$pending = null;
+		$file    = '';
 		foreach ( $this->offloader->items()->get_many( $paths ) as $path => $item ) {
 			if ( Items::SOURCE_POST !== $item['source_type'] || (int) $attachment_id === (int) $item['source_id'] ) {
 				continue;
 			}
 			if ( null === $sharing ) {
 				$sharing = $this->sharing_attachments( $attachment_id );
-				$pending = get_option( self::HANDOVER_OPTION, array() );
+				$file    = (string) get_post_meta( $attachment_id, '_wp_attached_file', true );
 			}
 			// Also files whose handover from a deleted attachment is still pending.
-			if ( in_array( (int) $item['source_id'], $sharing, true ) || ( is_array( $pending ) && isset( $pending[ $path ] ) ) ) {
+			if ( in_array( (int) $item['source_id'], $sharing, true ) || $this->handovers()->has( self::handover_key( $file, $path ) ) ) {
 				$paths = array_diff( $paths, array( $path ) );
 			}
 		}
@@ -577,7 +622,12 @@ final class Attachments {
 	 * @return array<string,string> Errors by path; empty on success.
 	 */
 	public function unoffload( $attachment_id ) {
-		$paths    = array_keys( $this->offloader->items()->get_by_source( Items::SOURCE_POST, (int) $attachment_id ) );
+		if ( ! $this->complete_handover( (int) $attachment_id ) ) {
+			return array( (string) get_post_meta( (int) $attachment_id, '_wp_attached_file', true ) => self::handover_pending_message() );
+		}
+		// The files are shared by all attachments with the same main file (media translations).
+		$group    = array_merge( array( (int) $attachment_id ), $this->sharing_attachments( (int) $attachment_id ) );
+		$paths    = array_keys( $this->group_items( $group ) );
 		$download = $this->offloader->download( $paths );
 		if ( ! empty( $download['errors'] ) ) {
 			return $download['errors'];
@@ -1094,22 +1144,60 @@ final class Attachments {
 	 */
 
 	/**
+	 * Retry list.
+	 *
+	 * @return Entries
+	 */
+	private function retries() {
+		if ( null === $this->retries ) {
+			$this->retries = new Entries( self::RETRY_PREFIX );
+		}
+		return $this->retries;
+	}
+
+	/**
+	 * List of pending handovers.
+	 *
+	 * @return Entries
+	 */
+	private function handovers() {
+		if ( null === $this->handovers ) {
+			$this->handovers = new Entries( self::HANDOVER_PREFIX );
+		}
+		return $this->handovers;
+	}
+
+	/**
+	 * Key of a pending handover.
+	 *
+	 * @param string $file Main file of the attachments sharing the path.
+	 * @param string $path Relative path.
+	 * @return string
+	 */
+	private static function handover_key( $file, $path ) {
+		return md5( (string) $file ) . '_' . md5( (string) $path );
+	}
+
+	/**
+	 * Message for operations refused while a handover is pending.
+	 *
+	 * @return string
+	 */
+	private static function handover_pending_message() {
+		return __( 'The files are still being handed over to another attachment that uses them (e.g. a translation). Please try again later.', 'bm-s3-offload' );
+	}
+
+	/**
 	 * Remembers a failed attachment.
 	 *
 	 * @param int $attachment_id Attachment ID.
 	 * @return void
 	 */
 	private function add_retry( $attachment_id ) {
-		$this->change_list(
-			self::RETRY_OPTION,
-			static function ( array $retry ) use ( $attachment_id ) {
-				if ( ! isset( $retry[ $attachment_id ] ) && count( $retry ) >= 1000 ) {
-					return $retry; // Bulk tools will catch the rest.
-				}
-				$retry[ $attachment_id ] = isset( $retry[ $attachment_id ] ) ? (int) $retry[ $attachment_id ] : 0;
-				return $retry;
-			}
-		);
+		if ( ! $this->retries()->has( (string) (int) $attachment_id ) && $this->retries()->count() >= 1000 ) {
+			return; // Bulk tools will catch the rest.
+		}
+		$this->retries()->add( (string) (int) $attachment_id, 0 );
 	}
 
 	/**
@@ -1119,40 +1207,7 @@ final class Attachments {
 	 * @return void
 	 */
 	private function clear_retry( $attachment_id ) {
-		$retry = get_option( self::RETRY_OPTION, array() );
-		if ( ! is_array( $retry ) || ! isset( $retry[ $attachment_id ] ) ) {
-			return; // Cheap check first: most attachments are not in the list.
-		}
-		$this->change_list(
-			self::RETRY_OPTION,
-			static function ( array $retry ) use ( $attachment_id ) {
-				unset( $retry[ $attachment_id ] );
-				return $retry;
-			}
-		);
-	}
-
-	/**
-	 * Changes a list option (retries, handovers) under a short lock: requests
-	 * that add entries and the cron that works them off run at the same time,
-	 * and a plain read-modify-write would lose the changes of one of them.
-	 *
-	 * @param string   $option Option name.
-	 * @param callable $change Receives the current list (fresh from the database), returns the new one.
-	 * @return void
-	 */
-	private function change_list( $option, callable $change ) {
-		$lock = $option . '_lock';
-		// Without the lock (held longer than expected), the change is still made: a rare
-		// lost update is better than dropping this one for sure.
-		$token = Lock::acquire( $lock, 30, 5.0 );
-		Lock::flush_cache( $option );
-		$list = get_option( $option, array() );
-		$new  = $change( is_array( $list ) ? $list : array() );
-		if ( $new !== $list ) {
-			update_option( $option, $new, false );
-		}
-		Lock::release( $lock, $token );
+		$this->retries()->remove( (string) (int) $attachment_id );
 	}
 
 	/**
@@ -1165,46 +1220,27 @@ final class Attachments {
 			return;
 		}
 
-		$retry = get_option( self::RETRY_OPTION, array() );
-		if ( ! is_array( $retry ) || empty( $retry ) ) {
-			return;
-		}
-
-		// Uploads take long: the results are applied to the list afterwards, under its lock.
-		$done   = array();
-		$failed = array();
-		foreach ( array_slice( $retry, 0, 25, true ) as $attachment_id => $attempts ) {
+		// Each entry is changed on its own (single statements): entries added or removed by
+		// other requests meanwhile are not affected.
+		foreach ( $this->retries()->all( 25 ) as $key => $attempts ) {
+			$attachment_id = (int) $key;
+			$attempts      = (int) $attempts;
 			if ( ! get_post( $attachment_id ) || $attempts + 1 >= self::MAX_ATTEMPTS ) {
-				$done[] = $attachment_id;
+				$this->retries()->remove( (string) $key );
 				continue;
 			}
 			// Files another attachment with the same main file uploaded are not its own (media translations).
-			$paths  = $this->own_paths( (int) $attachment_id, $this->paths( (int) $attachment_id ) );
-			$result = $this->offloader->upload( Items::SOURCE_POST, (int) $attachment_id, $paths, $this->is_private( (int) $attachment_id ) );
+			$paths  = $this->own_paths( $attachment_id, $this->paths( $attachment_id ) );
+			$result = $this->offloader->upload( Items::SOURCE_POST, $attachment_id, $paths, $this->is_private( $attachment_id ) );
 			if ( empty( $result['errors'] ) ) {
-				$done[] = $attachment_id;
-				if ( $this->offloader->settings()->get( 'remove_local' ) && $this->can_remove_local( (int) $attachment_id ) ) {
+				$this->retries()->remove( (string) $key );
+				if ( $this->offloader->settings()->get( 'remove_local' ) && $this->can_remove_local( $attachment_id ) ) {
 					$this->offloader->queue_local_removal( $paths );
 				}
 			} else {
-				$failed[ $attachment_id ] = $attempts + 1;
+				$this->retries()->update( (string) $key, $attempts + 1 ); // No effect if removed meanwhile.
 			}
 		}
-
-		$this->change_list(
-			self::RETRY_OPTION,
-			static function ( array $retry ) use ( $done, $failed ) {
-				foreach ( $done as $attachment_id ) {
-					unset( $retry[ $attachment_id ] );
-				}
-				foreach ( $failed as $attachment_id => $attempts ) {
-					if ( isset( $retry[ $attachment_id ] ) ) { // Not removed meanwhile (e.g. offloaded by another request).
-						$retry[ $attachment_id ] = max( (int) $retry[ $attachment_id ], $attempts );
-					}
-				}
-				return $retry;
-			}
-		);
 	}
 
 	/**
@@ -1213,8 +1249,7 @@ final class Attachments {
 	 * @return int[]
 	 */
 	public function pending_retries() {
-		$retry = get_option( self::RETRY_OPTION, array() );
-		return is_array( $retry ) ? array_map( 'intval', array_keys( $retry ) ) : array();
+		return array_map( 'intval', array_keys( $this->retries()->all( 1000 ) ) );
 	}
 
 	/**
@@ -1230,18 +1265,27 @@ final class Attachments {
 		if ( empty( $paths ) ) {
 			return;
 		}
-		$this->change_list(
-			self::HANDOVER_OPTION,
-			static function ( array $pending ) use ( $paths, $file ) {
-				foreach ( $paths as $path ) {
-					if ( count( $pending ) >= 5000 ) {
-						break; // The files are kept anyway; they are only not reassigned.
-					}
-					$pending[ $path ] = (string) $file;
-				}
-				return $pending;
+		$count = $this->handovers()->count();
+		foreach ( $paths as $path ) {
+			if ( $count >= 5000 ) {
+				break; // The files are kept anyway; they are only not reassigned.
 			}
-		);
+			$this->handovers()->add( self::handover_key( $file, $path ), array( (string) $path, (string) $file ) );
+			++$count;
+		}
+	}
+
+	/**
+	 * Hands over the pending shared files of an attachment's main file now
+	 * (before operations on the files of a group).
+	 *
+	 * @param int $attachment_id Attachment ID.
+	 * @return bool False if a handover is still pending.
+	 */
+	private function complete_handover( $attachment_id ) {
+		$file    = (string) get_post_meta( (int) $attachment_id, '_wp_attached_file', true );
+		$entries = '' === $file ? array() : $this->handovers()->all( 5000, md5( $file ) . '_' );
+		return empty( $entries ) || $this->run_handovers( $entries );
 	}
 
 	/**
@@ -1252,25 +1296,45 @@ final class Attachments {
 	 * @return void
 	 */
 	public function retry_handovers() {
-		$pending = get_option( self::HANDOVER_OPTION, array() );
-		if ( ! is_array( $pending ) || empty( $pending ) ) {
-			return;
+		$entries = $this->handovers()->all( 500 );
+		if ( ! empty( $entries ) ) {
+			$this->run_handovers( $entries );
+		}
+	}
+
+	/**
+	 * Hands over pending shared files; finished entries are removed.
+	 *
+	 * @param array<string,mixed> $entries Entries by key.
+	 * @return bool Whether all of them are finished.
+	 */
+	private function run_handovers( array $entries ) {
+		$batch = array();
+		foreach ( $entries as $key => $entry ) {
+			if ( is_array( $entry ) && isset( $entry[0], $entry[1] ) ) {
+				$batch[ (string) $entry[0] ] = array( (string) $key, (string) $entry[1] );
+			} else {
+				$this->handovers()->remove( (string) $key ); // Unreadable.
+			}
+		}
+		if ( empty( $batch ) ) {
+			return true;
 		}
 
 		$groups = array();
 		$done   = array();
-		$batch  = array_slice( $pending, 0, 500, true );
 		$this->offloader->items()->forget( array_keys( $batch ) );
 		$items = $this->offloader->items()->get_many( array_keys( $batch ) );
-		foreach ( $batch as $path => $file ) {
+		foreach ( $batch as $path => $entry ) {
 			$item = isset( $items[ $path ] ) ? $items[ $path ] : null;
 			if ( ! $item || Items::SOURCE_POST !== $item['source_type'] || get_post( (int) $item['source_id'] ) ) {
 				$done[] = $path; // Gone or owned by an existing attachment already.
 				continue;
 			}
-			$groups[ $file ][] = $path;
+			$groups[ $entry[1] ][] = $path;
 		}
 
+		$finished = true;
 		foreach ( $groups as $file => $paths ) {
 			$owners = $this->attachments_with_file( (string) $file );
 			if ( empty( $owners ) ) {
@@ -1280,18 +1344,14 @@ final class Attachments {
 				$failed = $this->offloader->items()->reassign( $paths, Items::SOURCE_POST, $owners[0] );
 				$this->adopt_privacy( $owners[0], $items[ $paths[0] ] );
 			}
-			$done = array_merge( $done, array_diff( $paths, $failed ) );
+			$finished = $finished && empty( $failed );
+			$done     = array_merge( $done, array_diff( $paths, $failed ) );
 		}
 
-		$this->change_list(
-			self::HANDOVER_OPTION,
-			static function ( array $pending ) use ( $done ) {
-				foreach ( $done as $path ) {
-					unset( $pending[ $path ] );
-				}
-				return $pending;
-			}
-		);
+		foreach ( $done as $path ) {
+			$this->handovers()->remove( $batch[ $path ][0] );
+		}
+		return $finished;
 	}
 
 	/**
@@ -1300,7 +1360,36 @@ final class Attachments {
 	 * @return int
 	 */
 	public function pending_handovers() {
-		$pending = get_option( self::HANDOVER_OPTION, array() );
-		return is_array( $pending ) ? count( $pending ) : 0;
+		return $this->handovers()->count();
+	}
+
+	/**
+	 * Moves the lists of 1.0.10/1.0.11 (one option each) to single entries
+	 * (upgrade). The old option is only deleted when all entries were moved.
+	 *
+	 * @return bool Whether nothing is left to migrate.
+	 */
+	public static function migrate_lists() {
+		$complete = true;
+		$retry    = get_option( 'bms3o_retry', null );
+		if ( is_array( $retry ) ) {
+			$entries = new Entries( self::RETRY_PREFIX );
+			foreach ( $retry as $attachment_id => $attempts ) {
+				$complete = $entries->add( (string) (int) $attachment_id, (int) $attempts ) && $complete;
+			}
+		}
+		$handover = get_option( 'bms3o_handover', null );
+		if ( is_array( $handover ) ) {
+			$entries = new Entries( self::HANDOVER_PREFIX );
+			foreach ( $handover as $path => $file ) {
+				$complete = $entries->add( self::handover_key( $file, $path ), array( (string) $path, (string) $file ) ) && $complete;
+			}
+		}
+		if ( $complete ) {
+			foreach ( self::LEGACY_LISTS as $option ) {
+				delete_option( $option );
+			}
+		}
+		return $complete;
 	}
 }

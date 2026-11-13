@@ -33,7 +33,7 @@ bms3o_t_settings(
 		'sign_all'       => false,
 	)
 );
-delete_option( 'bms3o_retry' );
+bms3o_t_clear_lists();
 
 $cases = array(
 	array( 'replace', false ),

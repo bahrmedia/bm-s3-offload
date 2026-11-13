@@ -210,7 +210,7 @@ final class MediaLibrary {
 		if ( ! $this->plugin->settings->is_configured() ) {
 			return array();
 		}
-		$items = $this->plugin->offloader->items()->get_by_source( 'attachment', (int) $attachment_id );
+		$items = $this->plugin->attachments->items_of( (int) $attachment_id ); // Also files a translation shares.
 		if ( empty( $items ) ) {
 			return array( 'offload' );
 		}
